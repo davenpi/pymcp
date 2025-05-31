@@ -1,13 +1,14 @@
-name: Main branch checks
+# Disabled - using pre-commit hooks instead
+# name: Main branch checks
 
-on:
-  push:
-    branches:
-      - main
-      - "v*.*.*"
-    tags:
-      - "v*.*.*"
+# on:
+#   push:
+#     branches:
+#       - main
+#       - "v*.*.*"
+#     tags:
+#       - "v*.*.*"
 
-jobs:
-  checks:
-    uses: ./.github/workflows/shared.yml
+# jobs:
+#   checks:
+#     uses: ./.github/workflows/shared.yml
