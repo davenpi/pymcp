@@ -33,8 +33,8 @@ class TestRequestSerialization:
             method="test",
             progress_token="123",
         )
-        wire = original.to_wire()
-        reconstructed = Request.from_wire(wire)
+        wire = original.to_protocol()
+        reconstructed = Request.from_protocol(wire)
         assert reconstructed == original
 
     def test_initialize_request_roundtrip(self):
@@ -44,18 +44,18 @@ class TestRequestSerialization:
             client_info=Implementation(name="test_client", version="1.0"),
             capabilities=ClientCapabilities(roots=RootsCapability(list_changed=True)),
         )
-        wire = original.to_wire()
-        reconstructed = InitializeRequest.from_wire(wire)
+        wire = original.to_protocol()
+        reconstructed = InitializeRequest.from_protocol(wire)
         assert reconstructed == original
 
     def test_from_wire_missing_fields(self):
         with pytest.raises(ValidationError):
             # Missing required fields e.g., protocolVersion
-            InitializeRequest.from_wire({"method": "initialize"})
+            InitializeRequest.from_protocol({"method": "initialize"})
 
     def test_from_wire_missing_method(self):
         with pytest.raises(ValueError):
-            InitializeRequest.from_wire({"not_method": "initialize"})
+            InitializeRequest.from_protocol({"not_method": "initialize"})
 
     def test_from_wire_side_effect_free(self):
         """Make sure that the from_wire method does not mutate the input data"""
@@ -64,7 +64,7 @@ class TestRequestSerialization:
             "params": {"arg1": "testing", "_meta": {"progressToken": "123"}},
         }
         original_data = copy.deepcopy(data)
-        _ = Request.from_wire(data)
+        _ = Request.from_protocol(data)
         assert data == original_data
 
 
@@ -74,13 +74,13 @@ class TestNotificationSerialization:
             method="test",
             params={"arg1": "testing"},
         )
-        wire = original.to_wire()
-        reconstructed = Notification.from_wire(wire)
+        wire = original.to_protocol()
+        reconstructed = Notification.from_protocol(wire)
         assert reconstructed == original
 
     def test_from_wire_invalid_data(self):
         with pytest.raises(ValueError):
-            Notification.from_wire({"not_method": "test"})
+            Notification.from_protocol({"not_method": "test"})
 
     def test_from_wire_side_effect_free(self):
         data = {
@@ -89,7 +89,7 @@ class TestNotificationSerialization:
             "_meta": {"progressToken": "123"},
         }
         original_data = copy.deepcopy(data)
-        _ = Notification.from_wire(data)
+        _ = Notification.from_protocol(data)
         assert data == original_data
 
 

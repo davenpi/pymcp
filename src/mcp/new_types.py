@@ -19,8 +19,8 @@ class Request(ProtocolModel):
     progress_token: ProgressToken | None = None
 
     @classmethod
-    def from_wire(cls, data: dict[str, Any]) -> "Request":
-        """Convert from wire format (spec-compliant JSON-RPC)"""
+    def from_protocol(cls, data: dict[str, Any]) -> "Request":
+        """Convert from protocol-level representation"""
         if "method" not in data:
             raise ValueError("Invalid request data: missing 'method' field")
 
@@ -30,14 +30,15 @@ class Request(ProtocolModel):
         meta = params.pop("_meta", {})
         progress_token = meta.get("progressToken")
 
+        # TODO: Think through nested fields
         return cls(
             method=method,
             progress_token=progress_token,
             **params,
         )
 
-    def to_wire(self) -> dict[str, Any]:
-        """Convert to wire format (spec-compliant JSON-RPC)"""
+    def to_protocol(self) -> dict[str, Any]:
+        """Convert to protocol-level representation"""
         params = self.model_dump(
             exclude={"method", "progress_token"},
             by_alias=True,
@@ -59,8 +60,8 @@ class Notification(ProtocolModel):
     meta: dict[str, Any] | None = None
 
     @classmethod
-    def from_wire(cls, data: dict[str, Any]) -> "Notification":
-        """Convert from wire format (spec-compliant JSON-RPC)"""
+    def from_protocol(cls, data: dict[str, Any]) -> "Notification":
+        """Convert from protocol-level representation"""
         if "method" not in data:
             raise ValueError("Invalid notification data: missing 'method' field")
 
@@ -74,8 +75,8 @@ class Notification(ProtocolModel):
             **params,
         )
 
-    def to_wire(self) -> dict[str, Any]:
-        """Convert to wire format (spec-compliant JSON-RPC)"""
+    def to_protocol(self) -> dict[str, Any]:
+        """Convert to protocol-level representation"""
         params = self.model_dump(
             exclude={"method", "meta"},
             by_alias=True,
@@ -140,17 +141,17 @@ class JSONRPCRequest(ProtocolModel):
     @classmethod
     def from_request(cls, request: Request, id: RequestId) -> "JSONRPCRequest":
         """Convert from Request to JSONRPCRequest"""
-        wire_data = request.to_wire()
+        protocol_data = request.to_protocol()
         return cls(
             id=id,
-            method=wire_data["method"],
-            params=wire_data.get("params"),
+            method=protocol_data["method"],
+            params=protocol_data.get("params"),
         )
 
     def to_request(self, request_cls: type[Request]) -> Request:
         """Convert back to a Request object"""
-        wire_data = self.model_dump(exclude_none=True)
-        return request_cls.from_wire(wire_data)
+        protocol_data = self.model_dump(exclude={"jsonrpc", "id"}, exclude_none=True)
+        return request_cls.from_protocol(protocol_data)
 
     def to_wire(self) -> dict[str, Any]:
         """Convert to wire format (spec-compliant JSON-RPC)"""
