@@ -1,10 +1,9 @@
-# MCP Python SDK - Experimental Fork
-
-Exploring improvements to developer experience in the MCP Python ecosystem.
+## Experimental Fork of MCP Python SDK
 
 **Focus areas:**
-- Clean, helpful type system
-- Comprehensive test coverage  
-- Developer experience improvements
+- Intuitive types
+- Robust test suite
+- Awesome docs
+- Delightful developer experience
 
 *Experimental - API will change rapidly*
