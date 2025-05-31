@@ -11,6 +11,8 @@ We want to test:
 4. Type safety - proving error handling works and developer experience is seamless
 """
 
+import copy
+
 import pytest
 from pydantic import ValidationError
 
@@ -18,6 +20,8 @@ from mcp.new_types import (
     ClientCapabilities,
     Implementation,
     InitializeRequest,
+    JSONRPCRequest,
+    Notification,
     Request,
     RootsCapability,
 )
@@ -44,10 +48,49 @@ class TestRequestSerialization:
         reconstructed = InitializeRequest.from_wire(wire)
         assert reconstructed == original
 
-    def test_from_wire_invalid_data(self):
+    def test_from_wire_missing_fields(self):
         with pytest.raises(ValidationError):
             # Missing required fields e.g., protocolVersion
             InitializeRequest.from_wire({"method": "initialize"})
+
+    def test_from_wire_missing_method(self):
+        with pytest.raises(ValueError):
+            InitializeRequest.from_wire({"not_method": "initialize"})
+
+    def test_from_wire_side_effect_free(self):
+        """Make sure that the from_wire method does not mutate the input data"""
+        data = {
+            "method": "test",
+            "params": {"arg1": "testing", "_meta": {"progressToken": "123"}},
+        }
+        original_data = copy.deepcopy(data)
+        _ = Request.from_wire(data)
+        assert data == original_data
+
+
+class TestNotificationSerialization:
+    def test_notification_roundtrip(self):
+        original = Notification(
+            method="test",
+            params={"arg1": "testing"},
+        )
+        wire = original.to_wire()
+        reconstructed = Notification.from_wire(wire)
+        assert reconstructed == original
+
+    def test_from_wire_invalid_data(self):
+        with pytest.raises(ValueError):
+            Notification.from_wire({"not_method": "test"})
+
+    def test_from_wire_side_effect_free(self):
+        data = {
+            "method": "test",
+            "params": {"arg1": "testing"},
+            "_meta": {"progressToken": "123"},
+        }
+        original_data = copy.deepcopy(data)
+        _ = Notification.from_wire(data)
+        assert data == original_data
 
 
 class TestWireFormatCompliance:
@@ -62,8 +105,33 @@ class TestWireFormatCompliance:
         pass
 
 
-class TestInitializationFlow:
+class TestInitialization:
     # All initialization-related types together
+
+    def test_initialize_request_full_stack(self):
+        # Create the high-level request
+        request = InitializeRequest(
+            client_info=Implementation(name="test", version="1.0"),
+            capabilities=ClientCapabilities(),
+        )
+
+        # Wrap in JSON-RPC envelope
+        jsonrpc_request = JSONRPCRequest.from_request(request, id="1")
+
+        # Serialize to wire
+        wire_data = jsonrpc_request.to_wire()
+
+        # Verify JSON-RPC structure
+        assert wire_data["jsonrpc"] == "2.0"
+        assert wire_data["id"] == "1"
+        assert wire_data["method"] == "initialize"
+
+        # Round-trip back
+        reconstructed = JSONRPCRequest.model_validate(wire_data)
+        original_request = reconstructed.to_request(InitializeRequest)
+
+        assert original_request.client_info.name == "test"
+
     def test_initialize_request(self):
         pass
 
@@ -74,19 +142,19 @@ class TestInitializationFlow:
         pass
 
 
-class TestToolsFlow:
-    # All tools-related types together
-    def test_list_tools_request(self):
+class TestTools:
+    def test_list_tools_round_trip(self):
+        # Happy path: object → wire → object
         pass
 
-    def test_list_tools_response(self):
+    def test_list_tools_wire_format(self):
+        # Verify JSON matches spec exactly
         pass
 
-    def test_call_tool_request(self):
+    def test_call_tool_with_arguments(self):
+        # Test the complex case with nested data
         pass
 
-    def test_call_tool_response(self):
-        pass
-
-    def test_tool_progress_notification(self):  # Progress within tools context
+    def test_invalid_wire_data(self):
+        # Missing fields, wrong types, etc.
         pass

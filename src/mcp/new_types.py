@@ -7,6 +7,7 @@ JSONRPC_VERSION = "2.0"
 RequestId = int | str
 
 ProgressToken = str | int
+Cursor = str
 
 
 class ProtocolModel(BaseModel):
@@ -20,8 +21,11 @@ class Request(ProtocolModel):
     @classmethod
     def from_wire(cls, data: dict[str, Any]) -> "Request":
         """Convert from wire format (spec-compliant JSON-RPC)"""
+        if "method" not in data:
+            raise ValueError("Invalid request data: missing 'method' field")
+
         method = data["method"]
-        params = data.get("params", {})
+        params = dict(data.get("params", {}))
 
         meta = params.pop("_meta", {})
         progress_token = meta.get("progressToken")
@@ -50,13 +54,47 @@ class Request(ProtocolModel):
         return result
 
 
-class Notification(BaseModel):
+class Notification(ProtocolModel):
     method: str
-    params: dict[str, Any] | None = None
+    meta: dict[str, Any] | None = None
+
+    @classmethod
+    def from_wire(cls, data: dict[str, Any]) -> "Notification":
+        """Convert from wire format (spec-compliant JSON-RPC)"""
+        if "method" not in data:
+            raise ValueError("Invalid notification data: missing 'method' field")
+
+        method = data["method"]
+        params = dict(data.get("params", {}))
+        meta = params.pop("_meta", None) if params else None
+
+        return cls(
+            method=method,
+            meta=meta,
+            **params,
+        )
+
+    def to_wire(self) -> dict[str, Any]:
+        """Convert to wire format (spec-compliant JSON-RPC)"""
+        params = self.model_dump(
+            exclude={"method", "meta"},
+            by_alias=True,
+            exclude_none=True,
+        )
+        if self.meta is not None:
+            params["_meta"] = self.meta
+
+        result: dict[str, Any] = {"method": self.method}
+        if params:
+            result["params"] = params
+        return result
 
 
 class Result(BaseModel):
     pass
+
+
+# Capability Types
 
 
 class RootsCapability(ProtocolModel):
@@ -74,6 +112,9 @@ class ClientCapabilities(ProtocolModel):
     sampling: dict[str, Any] | None = None
 
 
+## Initialization Types
+
+
 class InitializeRequest(Request):
     method: str = Field(default="initialize", frozen=True)
     protocol_version: str = Field(
@@ -81,6 +122,13 @@ class InitializeRequest(Request):
     )
     client_info: Implementation = Field(alias="clientInfo")
     capabilities: ClientCapabilities = Field(default_factory=ClientCapabilities)
+
+
+class InitializedNotification(Notification):
+    method: str = Field(default="notifications/initialized", frozen=True)
+
+
+## JSON-RPC Types
 
 
 class JSONRPCRequest(ProtocolModel):
