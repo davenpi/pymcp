@@ -156,3 +156,11 @@ class JSONRPCRequest(ProtocolModel):
     def to_wire(self) -> dict[str, Any]:
         """Convert to wire format (spec-compliant JSON-RPC)"""
         return self.model_dump(exclude_none=True)
+
+
+# Tool Types
+
+
+class ListToolsRequest(Request):
+    method: str = Field(default="tools/list", frozen=True)
+    cursor: Cursor | None = None

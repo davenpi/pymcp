@@ -21,6 +21,7 @@ from mcp.new_types import (
     Implementation,
     InitializeRequest,
     JSONRPCRequest,
+    ListToolsRequest,
     Notification,
     Request,
     RootsCapability,
@@ -143,10 +144,6 @@ class TestInitialization:
 
 
 class TestTools:
-    def test_list_tools_round_trip(self):
-        # Happy path: object → wire → object
-        pass
-
     def test_list_tools_wire_format(self):
         # Verify JSON matches spec exactly
         pass
@@ -157,4 +154,31 @@ class TestTools:
 
     def test_invalid_wire_data(self):
         # Missing fields, wrong types, etc.
+        pass
+
+    def test_list_tools_request_minimal(self):
+        # Test with no optional fields
+        request = ListToolsRequest()
+        protocol_data = request.to_protocol()
+        reconstructed = ListToolsRequest.from_protocol(protocol_data)
+        assert reconstructed == request
+        assert reconstructed.cursor is None
+        assert reconstructed.progress_token is None
+        assert reconstructed.method == "tools/list"
+
+    def test_list_tools_request_round_trip(self):
+        # Happy path: object → protocol → object
+        request = ListToolsRequest(
+            cursor="123",
+            progress_token="456",
+        )
+        protocol_data = request.to_protocol()
+        reconstructed = ListToolsRequest.from_protocol(protocol_data)
+        assert reconstructed == request
+        assert reconstructed.cursor == "123"
+        assert reconstructed.progress_token == "456"
+        assert reconstructed.method == "tools/list"
+
+    def test_list_tools_request_wire_format(self):
+        # Verify JSON matches spec exactly
         pass
