@@ -1,0 +1,154 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Protocol basics
+
+We need to define how servers and clients talk. They send three kinds of messages. All JSON RPC 2.0
+
+**Request**
+
+Note the ID. MCP requires this.
+```typescript
+{
+  jsonrpc: "2.0";
+  id: string | number;
+  method: string;
+  params?: {
+    [key: string]: unknown;
+  };
+}
+```
+Also note we are omitting optional metadata here (progress tokens). Full types in the spec.
+
+**Response**
+
+Respond to request. Correlate with ID. Give a result OR an error, not both.
+```typescript
+{
+  jsonrpc: "2.0";
+  id: string | number;
+  result?: {
+    [key: string]: unknown;
+  }
+  error?: {
+    code: number;
+    message: string;
+    data?: unknown;
+  }
+}
+```
+
+**Notification**
+
+Don't respond to notifications. "Fire and forget". Progress, initialized, resource update, etc.
+
+No IDs in notifications. 
+```typescript
+{
+  jsonrpc: "2.0";
+  method: string;
+  params?: {
+    [key: string]: unknown;
+  };
+}
+```
+
+Can batch requests and notifications, i.e., send a bunch in a group. Implementations
+must be able to receive batches, but don't need to send batches.
+
+# Lifecycle
+
+We need to standardize how servers and clients start communicating and manage ongoing
+connections with each other. The goal of the lifecyle is to be "transport agnostic" so
+that the same procedure is used if the client+server are communicating by mail, HTTP, stdio, whatever.
+
+Steps are 
+1. Initialization
+2. Operation
+3. Shutdown
+
+## Initialization
+
+This ALWAYS comes first. Obvious but important. No batching.
+
+Client sends an `Initialize` request to the server. Main aim here to the let the
+server know 
+  - What version of the protocol client we are following
+  - What our capabilities are (only `roots` and `sampling`
+  defined in the spec—more on those later. Can also declare `experimental`)
+  - Basic info about name and version string (currently an `Implementation` in the spec).
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": "2024-11-05", // Should be the most recent version we support
+    "capabilities": {
+      "roots": {
+        "listChanged": true // If true, can send notifications when the "roots" list changes.
+      },
+      "sampling": {}
+    },
+    "clientInfo": {
+      "name": "ExampleClient",
+      "version": "1.0.0"
+    }
+  }
+}
+```
+
+Server responds with an `InitializeResult`. Main aim is to communicate:
+- We heard your `Intialize` request.
+- Ensure protocol version compatibility. If the server supports the same version in the
+client, it must respond with that version
+- Declare capabilities (logging, prompts, tools, resources, completions, experimental?).
+So
+- Share name and version info
+- Provide hints on how to interact with this server (optional instructions)
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "protocolVersion": "2024-11-05",
+    "capabilities": {
+      "logging": {},
+      "prompts": {
+        "listChanged": true 
+      },
+      "resources": {
+        "subscribe": true, // Client can subscribe to resource updates
+        "listChanged": true
+      },
+      "tools": {
+        "listChanged": true // Supports notifications when tool list changes
+      }
+    },
+    "serverInfo": {
+      "name": "ExampleServer",
+      "version": "1.0.0"
+    },
+    "instructions": "Optional instructions for the client" // Can pass on to host LLM.
+  }
+}
+```
+
+If the protocol versions are compatible (server responds with a version client supports),
+the client MUST send an `Initialized` notification.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "notifications/initialized"
+}
+```
+
+This three message exchange is what we mean by "Initialization".
+
+Spec encourages we don't send any other messages until initialization is complete.
+If we do send a message, try to keep it to a ping.
