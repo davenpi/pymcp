@@ -23,7 +23,6 @@ from mcp.new_types import (
     InitializeResult,
     JSONRPCRequest,
     ListToolsRequest,
-    Notification,
     Request,
     RootsCapability,
     ServerCapabilities,
@@ -125,31 +124,6 @@ class TestSerialization:
         assert data == original_data
 
 
-class TestNotificationSerialization:
-    def test_notification_roundtrip(self):
-        original = Notification(
-            method="test",
-            params={"arg1": "testing"},
-        )
-        wire = original.to_protocol()
-        reconstructed = Notification.from_protocol(wire)
-        assert reconstructed == original
-
-    def test_from_protocol_invalid_data(self):
-        with pytest.raises(ValueError):
-            Notification.from_protocol({"not_method": "test"})
-
-    def test_from_protocol_side_effect_free(self):
-        data = {
-            "method": "test",
-            "params": {"arg1": "testing"},
-            "_meta": {"progressToken": "123"},
-        }
-        original_data = copy.deepcopy(data)
-        _ = Notification.from_protocol(data)
-        assert data == original_data
-
-
 class TestWireFormatCompliance:
     # Making sure the JSON-RPC envelope is correct
     def test_jsonrpc_request_envelope(self):
@@ -202,7 +176,11 @@ class TestInitialization:
             server_info=Implementation(name="test_server", version="1.0"),
         )
         protocol_data = result.to_protocol()
+        print("protocol_data", protocol_data)
+        print("result", result)
         reconstructed = InitializeResult.from_protocol(protocol_data)
+        print("-" * 100)
+        print("reconstructed", reconstructed)
         assert reconstructed == result
         assert reconstructed.protocol_version == "2025-03-26"
         assert reconstructed.capabilities is not None

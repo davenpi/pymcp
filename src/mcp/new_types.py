@@ -49,33 +49,19 @@ class Request(ProtocolModel):
 
 class Notification(ProtocolModel):
     method: str
-    meta: dict[str, Any] | None = None
 
     @classmethod
     def from_protocol(cls, data: dict[str, Any]) -> "Notification":
         """Convert from protocol-level representation"""
-        if "method" not in data:
-            raise ValueError("Invalid notification data: missing 'method' field")
-
-        method = data["method"]
-        params = dict(data.get("params", {}))
-        meta = params.pop("_meta", None) if params else None
-
-        return cls(
-            method=method,
-            meta=meta,
-            **params,
-        )
+        return cls(method=data["method"])
 
     def to_protocol(self) -> dict[str, Any]:
         """Convert to protocol-level representation"""
         params = self.model_dump(
-            exclude={"method", "meta"},
+            exclude={"method"},
             by_alias=True,
             exclude_none=True,
         )
-        if self.meta is not None:
-            params["_meta"] = self.meta
 
         result: dict[str, Any] = {"method": self.method}
         if params:
@@ -84,14 +70,12 @@ class Notification(ProtocolModel):
 
 
 class Result(ProtocolModel):
-    meta: dict[str, Any] | None = Field(default=None, alias="_meta")
-
     def to_protocol(self) -> dict[str, Any]:
         return self.model_dump(by_alias=True, exclude_none=True)
 
     @classmethod
     def from_protocol(cls, data: dict[str, Any]) -> "Result":
-        return cls(**data)
+        raise NotImplementedError("Use concrete Result subclasses")
 
 
 # Capability Types
@@ -163,12 +147,32 @@ class InitializeRequest(Request):
 class InitializedNotification(Notification):
     method: str = Field(default="notifications/initialized", frozen=True)
 
+    @classmethod
+    def from_protocol(cls, data: dict[str, Any]) -> "InitializedNotification":
+        params = data.get("params", {})
+        _ = params.get("_meta", {})
+
+        flattened = {
+            "method": data["method"],
+            **{k: v for k, v in params.items() if k != "_meta"},
+        }
+
+        return cls(**flattened)
+
 
 class InitializeResult(Result):
     protocol_version: str = Field(alias="protocolVersion")
     capabilities: ServerCapabilities
     server_info: Implementation = Field(alias="serverInfo")
     instructions: str | None = None
+
+    @classmethod
+    def from_protocol(cls, data: dict[str, Any]) -> "InitializeResult":
+        flattened = {
+            **{k: v for k, v in data.items() if k != "_meta"},
+        }
+
+        return cls(**flattened)
 
 
 # Tool Types
