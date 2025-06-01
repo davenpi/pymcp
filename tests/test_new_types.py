@@ -20,11 +20,13 @@ from mcp.new_types import (
     ClientCapabilities,
     Implementation,
     InitializeRequest,
+    InitializeResult,
     JSONRPCRequest,
     ListToolsRequest,
     Notification,
     Request,
     RootsCapability,
+    ServerCapabilities,
 )
 
 
@@ -139,8 +141,20 @@ class TestInitialization:
     def test_initialized_notification(self):
         pass
 
-    def test_client_capabilities_structure(self):
-        pass
+    def test_initialize_result_roundtrip(self):
+        result = InitializeResult(
+            protocol_version="2025-03-26",
+            capabilities=ServerCapabilities(),
+            server_info=Implementation(name="test_server", version="1.0"),
+        )
+        protocol_data = result.to_protocol()
+        reconstructed = InitializeResult.from_protocol(protocol_data)
+        assert reconstructed == result
+        assert reconstructed.protocol_version == "2025-03-26"
+        assert reconstructed.capabilities is not None
+        assert reconstructed.server_info.name == "test_server"
+        assert reconstructed.server_info.version == "1.0"
+        assert reconstructed.instructions is None
 
 
 class TestTools:

@@ -91,8 +91,15 @@ class Notification(ProtocolModel):
         return result
 
 
-class Result(BaseModel):
-    pass
+class Result(ProtocolModel):
+    meta: dict[str, Any] | None = Field(default=None, alias="_meta")
+
+    def to_protocol(self) -> dict[str, Any]:
+        return self.model_dump(by_alias=True, exclude_none=True)
+
+    @classmethod
+    def from_protocol(cls, data: dict[str, Any]) -> "Result":
+        return cls(**data)
 
 
 # Capability Types
@@ -113,6 +120,28 @@ class ClientCapabilities(ProtocolModel):
     sampling: dict[str, Any] | None = None
 
 
+class PromptsCapability(ProtocolModel):
+    list_changed: bool | None = Field(default=None, alias="listChanged")
+
+
+class ResourcesCapability(ProtocolModel):
+    subscribe: bool | None = None
+    list_changed: bool | None = Field(default=None, alias="listChanged")
+
+
+class ToolsCapability(ProtocolModel):
+    list_changed: bool | None = Field(default=None, alias="listChanged")
+
+
+class ServerCapabilities(ProtocolModel):
+    experimental: dict[str, Any] | None = None
+    logging: dict[str, Any] | None = None
+    completions: dict[str, Any] | None = None
+    prompts: PromptsCapability | None = None
+    resources: ResourcesCapability | None = None
+    tools: ToolsCapability | None = None
+
+
 ## Initialization Types
 
 
@@ -127,6 +156,13 @@ class InitializeRequest(Request):
 
 class InitializedNotification(Notification):
     method: str = Field(default="notifications/initialized", frozen=True)
+
+
+class InitializeResult(Result):
+    protocol_version: str = Field(alias="protocolVersion")
+    capabilities: ServerCapabilities
+    server_info: Implementation = Field(alias="serverInfo")
+    instructions: str | None = None
 
 
 ## JSON-RPC Types
