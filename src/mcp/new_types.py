@@ -78,6 +78,23 @@ class Result(ProtocolModel):
         raise NotImplementedError("Use concrete Result subclasses")
 
 
+PARSE_ERROR = -32700
+INVALID_REQUEST = -32600
+METHOD_NOT_FOUND = -32601
+INVALID_PARAMS = -32602
+INTERNAL_ERROR = -32603
+
+
+class Error(ProtocolModel):
+    code: int
+    message: str
+    data: Any | None = None
+
+    @classmethod
+    def from_protocol(cls, data: dict[str, Any]) -> "Error":
+        return cls(**data)
+
+
 # Capability Types
 
 
@@ -220,6 +237,44 @@ class JSONRPCRequest(ProtocolModel):
         """Convert back to a Request object"""
         protocol_data = self.model_dump(exclude={"jsonrpc", "id"}, exclude_none=True)
         return request_cls.from_protocol(protocol_data)
+
+    def to_wire(self) -> dict[str, Any]:
+        """Convert to wire format (spec-compliant JSON-RPC)"""
+        return self.model_dump(exclude_none=True, by_alias=True)
+
+
+class JSONRPCResponse(ProtocolModel):
+    jsonrpc: str = Field(default=JSONRPC_VERSION, frozen=True)
+    id: RequestId
+    result: Result
+
+    @classmethod
+    def from_result(cls, result: Result, id: RequestId) -> "JSONRPCResponse":
+        """Convert from Result to JSONRPCResponse"""
+        return cls(id=id, result=result)
+
+    def to_result(self) -> Result:
+        """Extract the Result object"""
+        return self.result
+
+    def to_wire(self) -> dict[str, Any]:
+        """Convert to wire format (spec-compliant JSON-RPC)"""
+        return self.model_dump(exclude_none=True, by_alias=True)
+
+
+class JSONRPCError(ProtocolModel):
+    jsonrpc: str = Field(default=JSONRPC_VERSION, frozen=True)
+    id: RequestId
+    error: Error
+
+    @classmethod
+    def from_error(cls, error: Error, id: RequestId) -> "JSONRPCError":
+        """Convert from Error to JSONRPCError"""
+        return cls(id=id, error=error)
+
+    def to_error(self) -> Error:
+        """Extract the Error object"""
+        return self.error
 
     def to_wire(self) -> dict[str, Any]:
         """Convert to wire format (spec-compliant JSON-RPC)"""
