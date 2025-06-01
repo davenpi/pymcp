@@ -21,20 +21,12 @@ class Request(ProtocolModel):
     @classmethod
     def from_protocol(cls, data: dict[str, Any]) -> "Request":
         """Convert from protocol-level representation"""
-        if "method" not in data:
-            raise ValueError("Invalid request data: missing 'method' field")
+        params = data.get("params", {})
+        meta = params.get("_meta", {})
 
-        method = data["method"]
-        params = dict(data.get("params", {}))
-
-        meta = params.pop("_meta", {})
-        progress_token = meta.get("progressToken")
-
-        # TODO: Think through nested fields
         return cls(
-            method=method,
-            progress_token=progress_token,
-            **params,
+            method=data["method"],
+            progress_token=meta.get("progressToken"),
         )
 
     def to_protocol(self) -> dict[str, Any]:
@@ -153,6 +145,20 @@ class InitializeRequest(Request):
     client_info: Implementation = Field(alias="clientInfo")
     capabilities: ClientCapabilities = Field(default_factory=ClientCapabilities)
 
+    @classmethod
+    def from_protocol(cls, data: dict[str, Any]) -> "InitializeRequest":
+        """Convert from protocol-level representation"""
+        params = data.get("params", {})
+        meta = params.get("_meta", {})
+
+        flattened = {
+            "method": data["method"],
+            "progress_token": meta.get("progressToken"),
+            **{k: v for k, v in params.items() if k != "_meta"},
+        }
+
+        return cls(**flattened)
+
 
 class InitializedNotification(Notification):
     method: str = Field(default="notifications/initialized", frozen=True)
@@ -171,6 +177,20 @@ class InitializeResult(Result):
 class ListToolsRequest(Request):
     method: str = Field(default="tools/list", frozen=True)
     cursor: Cursor | None = None
+
+    @classmethod
+    def from_protocol(cls, data: dict[str, Any]) -> "ListToolsRequest":
+        """Convert from protocol-level representation"""
+        params = data.get("params", {})
+        meta = params.get("_meta", {})
+
+        flattened = {
+            "method": data["method"],
+            "progress_token": meta.get("progressToken"),
+            **{k: v for k, v in params.items() if k != "_meta"},
+        }
+
+        return cls(**flattened)
 
 
 ## JSON-RPC Types
