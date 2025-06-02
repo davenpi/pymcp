@@ -84,15 +84,31 @@ INVALID_PARAMS = -32602
 INTERNAL_ERROR = -32603
 
 
+# TODO: Work with exceptions and what I said in changelog.md
 class Error(ProtocolModel):
     code: int
     message: str
-    data: Any | None = None
+    data: str | dict[str, Any] | None = None
 
+    # @field_serializer("data")
+    # def serialize_data(
+    #     self, value: str | dict[str, Any] | Exception | None
+    # ) -> str | dict[str, Any] | None:
+    #     if isinstance(value, Exception):
+    #         return self._format_exception(value)
+    #     return value
+
+    def to_protocol(self) -> dict[str, Any]:
+        return self.model_dump(exclude_none=True)
+
+    def _format_exception(self, exc: Exception) -> str:
+        exc_type = type(exc).__name__
+        exc_msg = str(exc)
+        return f"{exc_type}: {exc_msg}"
+    
     @classmethod
     def from_protocol(cls, data: dict[str, Any]) -> "Error":
         return cls(**data)
-
 
 # Capability Types
 

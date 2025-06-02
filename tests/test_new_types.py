@@ -13,24 +13,79 @@ We want to test:
 
 import copy
 
-import pytest
 from pydantic import ValidationError
+import pytest
 
 from mcp.new_types import (
     ClientCapabilities,
+    Error,
     Implementation,
     InitializeRequest,
     InitializeResult,
     JSONRPCRequest,
     ListToolsRequest,
+    Notification,
     Request,
+    Result,
     RootsCapability,
     ServerCapabilities,
 )
 
 
 class TestSerialization:
-    def test_requests_preserve_data_through_roundtrip(self):
+    """
+    Serialization is when we convert our types to dicts.
+    Deserialization is when we convert dicts into our types.
+    """
+
+    def test_request_rejects_missing_method(self):
+        with pytest.raises(KeyError):
+            Request.from_protocol({"not_method": "test"})
+
+    def test_serialization_does_not_mutate_input(self):
+        protocol_data = {
+            "method": "test",
+            "params": {"_meta": {"progressToken": "123"}},
+        }
+        original_data = copy.deepcopy(protocol_data)
+        req = Request.from_protocol(protocol_data)
+        serialized = req.to_protocol()
+        assert req.method == "test"
+        assert req.progress_token == "123"
+        assert serialized == original_data
+        assert protocol_data == original_data
+
+    def test_request_converts_snake_case_to_camelCase_output(self):
+        req = Request(
+            method="test",
+            progress_token="123",
+        )
+        serialized = req.to_protocol()
+        assert serialized["method"] == "test"
+        assert serialized["params"]["_meta"]["progressToken"] == "123"
+
+    def test_request_ignores_unknown_fields_without_error(self):
+        protocol_data = {
+            "method": "test",
+            "params": {"_meta": {"progressToken": "123"}, "unknown": "test"},
+        }
+        req = Request.from_protocol(protocol_data)
+        assert req.progress_token == "123"
+        assert req.method == "test"
+        assert "unknown" not in req.model_dump()
+
+    def test_request_preserves_progress_token_roundtrip(self):
+        request = Request(
+            method="test",
+            progress_token="123",
+        )
+        protocol_data = request.to_protocol()
+        assert protocol_data["params"]["_meta"]["progressToken"] == "123"
+        reconstructed = Request.from_protocol(protocol_data)
+        assert reconstructed.progress_token == "123"
+        assert reconstructed.method == "test"
+
+    def test_request_preserves_data_through_roundtrip(self):
         requests = [
             InitializeRequest(
                 progress_token="123",
@@ -48,54 +103,56 @@ class TestSerialization:
             reconstructed = type(request).from_protocol(protocol_data)
             assert reconstructed == request
 
-    def test_request_alias_handling(self):
-        """Test that alias handling works correctly"""
-        request = InitializeRequest(
-            progress_token="123",
-            protocol_version="2025-03-26",
-            client_info=Implementation(name="test_client", version="1.0"),
-        )
-        protocol_data = request.to_protocol()
-        assert protocol_data["params"]["protocolVersion"] == "2025-03-26"
-        assert protocol_data["params"]["clientInfo"]["name"] == "test_client"
-        assert protocol_data["params"]["_meta"]["progressToken"] == "123"
-
-        reconstructed = InitializeRequest.from_protocol(protocol_data)
-        assert reconstructed == request
-
-    def test_from_protocol_missing_fields(self):
-        with pytest.raises(ValidationError):
-            InitializeRequest.from_protocol({"method": "initialize"})
-
-    def test_rejects_missing_method(self):
+    def test_notification_rejects_missing_method(self):
         with pytest.raises(KeyError):
-            InitializeRequest.from_protocol({"not_method": "initialize"})
+            Notification.from_protocol({"not_method": "test"})
 
-    def test_from_protocol_side_effect_free(self):
-        """Make sure that the from_protocol method does not mutate the input data"""
-        data = {
-            "method": "test",
-            "params": {"arg1": "testing", "_meta": {"progressToken": "123"}},
+    def test_notification_serialization_does_not_mutate_input(self):
+        protocol_data = {
+            "method": "notification/test",
         }
-        original_data = copy.deepcopy(data)
-        _ = Request.from_protocol(data)
-        assert data == original_data
+        original_data = copy.deepcopy(protocol_data)
+        notif = Notification.from_protocol(protocol_data)
+        serialized = notif.to_protocol()
+        assert serialized == original_data
+        assert protocol_data == original_data
 
+    def test_base_result_serialization_not_implemented(self):
+        protocol_data = {
+            "test": "result",
+        }
+        with pytest.raises(NotImplementedError):
+            Result.from_protocol(protocol_data)
 
-class TestWireFormatCompliance:
-    # Making sure the JSON-RPC envelope is correct
-    def test_jsonrpc_request_envelope(self):
-        pass
+    def test_error_rejects_missing_code(self):
+        with pytest.raises(ValidationError):
+            Error.from_protocol({"message": "test"})
 
-    def test_jsonrpc_notification_envelope(self):
-        pass
+    # def test_error_rejects_non_integer_code(self):
+    #     with pytest.raises(ValidationError):
+    #         Error.from_protocol({"code": "not_an_int", "message": "test"})
 
-    def test_jsonrpc_response_envelope(self):
-        pass
+    # def test_error_rejects_missing_message(self):
+    #     with pytest.raises(ValidationError):
+    #         Error.from_protocol({"code": -1, "data": "test"})
+
+    # def test_error_preserves_serializable_data(self):
+    #     # This should round-trip perfectly
+    #     data = {"code": -1, "message": "test", "data": {"field": "email"}}
+    #     err = Error.from_protocol(data)
+    #     assert err.to_protocol() == data
+
+    # def test_error_handles_non_serializable_data(self):
+    #     err = Error(code=-1, message="test", data=ValueError("test"))
+    #     result = err.to_protocol()
+    #     assert isinstance(result["data"], str)
+    #     assert result["data"] == "ValueError: test"
 
 
 class TestInitialization:
-    # All initialization-related types together
+    """
+    All initialization-related types together
+    """
 
     def test_initialize_request_full_stack(self):
         # Create the high-level request

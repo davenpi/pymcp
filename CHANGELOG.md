@@ -20,3 +20,39 @@ metadata edge case, that's fine.
 
 - When specific metadata use cases arise, support them explicitly. Otherwise we can
 encourage users to send logging notifications or something else more explicit.
+
+## Errors
+
+- Getting opinionated about `Error` data. Right now the spec says:
+
+```typescript
+export interface JSONRPCError {
+  jsonrpc: typeof JSONRPC_VERSION;
+  id: RequestId;
+  error: {
+    /**
+     * The error type that occurred.
+     */
+    code: number;
+    /**
+     * A short description of the error. The message SHOULD be limited to a concise single sentence.
+     */
+    message: string;
+    /**
+     * Additional information about the error. The value of this member is defined by the sender (e.g. detailed error information, nested errors etc.).
+     */
+    data?: unknown;
+  };
+}
+```
+
+zero guidance on what `data` shuold be. Kind of confusing for me and users. What should
+I put there?
+
+### Our choice
+
+`data: str | dict[str, Any] | Exception | None = None`
+
+This limits to sensible defuaults. Makes the "lazy" exception forwarding pattern easy.
+And covers all usage I've encountered so far. Do we really want to pass a bool or int
+the only error data?
