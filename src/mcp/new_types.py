@@ -20,7 +20,10 @@ class Request(ProtocolModel):
 
     @classmethod
     def from_protocol(cls, data: dict[str, Any]) -> "Request":
-        """Convert from protocol-level representation"""
+        """Convert from protocol-level representation.
+
+        Ignores metadata aside from progress token.
+        """
         params = data.get("params", {})
         meta = params.get("_meta", {})
 
@@ -56,7 +59,10 @@ class Notification(ProtocolModel):
         return cls(method=data["method"])
 
     def to_protocol(self) -> dict[str, Any]:
-        """Convert to protocol-level representation"""
+        """Convert to protocol-level representation
+
+        Method and params are siblings in the spec.
+        """
         params = self.model_dump(
             exclude={"method"},
             by_alias=True,
@@ -228,7 +234,7 @@ class InitializeResult(Result):
 
 class ListToolsRequest(Request):
     method: str = Field(default="tools/list", frozen=True)
-    cursor: Cursor | None = None
+    cursor: Cursor | None = None  # Cursor string is opaque. No meaning.
 
     @classmethod
     def from_protocol(cls, data: dict[str, Any]) -> "ListToolsRequest":
