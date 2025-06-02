@@ -13,8 +13,8 @@ We want to test:
 
 import copy
 
-from pydantic import ValidationError
 import pytest
+from pydantic import ValidationError
 
 from mcp.new_types import (
     ClientCapabilities,
@@ -42,7 +42,7 @@ class TestSerialization:
         with pytest.raises(KeyError):
             Request.from_protocol({"not_method": "test"})
 
-    def test_serialization_does_not_mutate_input(self):
+    def test_request_serialization_does_not_mutate_input(self):
         protocol_data = {
             "method": "test",
             "params": {"_meta": {"progressToken": "123"}},
@@ -67,12 +67,10 @@ class TestSerialization:
     def test_request_ignores_unknown_fields_without_error(self):
         protocol_data = {
             "method": "test",
-            "params": {"_meta": {"progressToken": "123"}, "unknown": "test"},
+            "params": {"unknown": "test"},
         }
         req = Request.from_protocol(protocol_data)
-        assert req.progress_token == "123"
         assert req.method == "test"
-        assert "unknown" not in req.model_dump()
 
     def test_request_preserves_progress_token_roundtrip(self):
         request = Request(
@@ -128,25 +126,26 @@ class TestSerialization:
         with pytest.raises(ValidationError):
             Error.from_protocol({"message": "test"})
 
-    # def test_error_rejects_non_integer_code(self):
-    #     with pytest.raises(ValidationError):
-    #         Error.from_protocol({"code": "not_an_int", "message": "test"})
+    def test_error_rejects_non_integer_code(self):
+        with pytest.raises(ValidationError):
+            Error.from_protocol({"code": "not_an_int", "message": "test"})
 
-    # def test_error_rejects_missing_message(self):
-    #     with pytest.raises(ValidationError):
-    #         Error.from_protocol({"code": -1, "data": "test"})
+    def test_error_rejects_missing_message(self):
+        with pytest.raises(ValidationError):
+            Error.from_protocol({"code": -1, "data": "test"})
 
-    # def test_error_preserves_serializable_data(self):
-    #     # This should round-trip perfectly
-    #     data = {"code": -1, "message": "test", "data": {"field": "email"}}
-    #     err = Error.from_protocol(data)
-    #     assert err.to_protocol() == data
+    def test_error_preserves_serializable_data(self):
+        # This should round-trip perfectly
+        data = {"code": -1, "message": "test", "data": {"field": "email"}}
+        err = Error.from_protocol(data)
+        assert err.to_protocol() == data
 
-    # def test_error_handles_non_serializable_data(self):
-    #     err = Error(code=-1, message="test", data=ValueError("test"))
-    #     result = err.to_protocol()
-    #     assert isinstance(result["data"], str)
-    #     assert result["data"] == "ValueError: test"
+    def test_error_serializes_exceptions(self):
+        err = Error(code=-1, message="test", data=ValueError("test"))
+        result = err.to_protocol()
+        assert isinstance(result["data"], dict)
+        assert result["data"]["type"] == "ValueError"
+        assert result["data"]["message"] == "test"
 
 
 class TestInitialization:

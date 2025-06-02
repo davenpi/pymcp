@@ -46,13 +46,5 @@ export interface JSONRPCError {
 }
 ```
 
-zero guidance on what `data` shuold be. Kind of confusing for me and users. What should
+zero guidance on what `data` should be. Kind of confusing for me and users. What should
 I put there?
-
-### Our choice
-
-`data: str | dict[str, Any] | Exception | None = None`
-
-This limits to sensible defuaults. Makes the "lazy" exception forwarding pattern easy.
-And covers all usage I've encountered so far. Do we really want to pass a bool or int
-the only error data?

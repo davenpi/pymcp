@@ -1,6 +1,7 @@
+import traceback
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 PROTOCOL_VERSION = "2025-03-26"
 JSONRPC_VERSION = "2.0"
@@ -84,31 +85,46 @@ INVALID_PARAMS = -32602
 INTERNAL_ERROR = -32603
 
 
-# TODO: Work with exceptions and what I said in changelog.md
 class Error(ProtocolModel):
     code: int
     message: str
-    data: str | dict[str, Any] | None = None
+    # Accepts: str (error details), dict (structured data), Exception (auto-formatted),
+    # or None
+    data: Any = None
 
-    # @field_serializer("data")
-    # def serialize_data(
-    #     self, value: str | dict[str, Any] | Exception | None
-    # ) -> str | dict[str, Any] | None:
+    # TODO: Problem is class signature does not match `Any` hint in constructor
+    @field_validator("data", mode="before")
+    @classmethod
+    def transform_data(
+        cls, value: str | dict[str, Any] | Exception | None
+    ) -> str | dict[str, Any] | None:
+        if isinstance(value, Exception):
+            return cls._format_exception(value)
+        return value
+
+    # @field_validator("data", mode="before")
+    # @classmethod
+    # def transform_data(cls, value: Any) -> Any:
     #     if isinstance(value, Exception):
-    #         return self._format_exception(value)
+    #         return cls._format_exception(value)
+    #     # Could add runtime validation for other unwanted types here
+    #     if not isinstance(value, (str, dict, type(None), Exception)):
+    #         raise ValueError(
+    #             f"data must be str, dict, Exception, or None, got {type(value)}"
+    #         )
     #     return value
 
     def to_protocol(self) -> dict[str, Any]:
         return self.model_dump(exclude_none=True)
 
-    def _format_exception(self, exc: Exception) -> str:
-        exc_type = type(exc).__name__
-        exc_msg = str(exc)
-        return f"{exc_type}: {exc_msg}"
-    
+    @staticmethod
+    def _format_exception(exc: Exception) -> str:
+        return "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+
     @classmethod
     def from_protocol(cls, data: dict[str, Any]) -> "Error":
         return cls(**data)
+
 
 # Capability Types
 
