@@ -229,7 +229,33 @@ class InitializeResult(Result):
         return cls(**flattened)
 
 
-# Tool Types
+# --------- One off types ----------
+
+
+class Ping(Request):
+    method: str = Field(default="ping", frozen=True)
+
+    @classmethod
+    def from_protocol(cls, data: dict[str, Any]) -> "Ping":
+        method = data["method"]
+        if method != "ping":
+            raise ValueError(f"Can't create Ping from '{method}' request.")
+        return cls()
+
+
+class CancelledNotification(Notification):
+    method: str = Field(default="notifications/cancelled", frozen=True)
+    request_id: RequestId = Field(alias="requestId")
+    reason: str | None = None
+
+    @classmethod
+    def from_protocol(cls, data: dict[str, Any]) -> "CancelledNotification":
+        params = data["params"]
+        flattened = {"method": data["method"], **params}
+        return cls(**flattened)
+
+
+# ---------- Tool Specific ----------
 
 
 class ListToolsRequest(Request):
@@ -250,6 +276,8 @@ class ListToolsRequest(Request):
 
         return cls(**flattened)
 
+
+#
 
 ## JSON-RPC Types
 
