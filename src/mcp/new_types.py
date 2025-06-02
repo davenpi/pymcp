@@ -5,7 +5,6 @@ from pydantic import BaseModel, ConfigDict, Field
 PROTOCOL_VERSION = "2025-03-26"
 JSONRPC_VERSION = "2.0"
 RequestId = int | str
-
 ProgressToken = str | int
 Cursor = str
 

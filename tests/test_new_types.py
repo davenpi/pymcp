@@ -48,48 +48,6 @@ class TestSerialization:
             reconstructed = type(request).from_protocol(protocol_data)
             assert reconstructed == request
 
-    # def test_handles_malformed_input(self):
-    #     """All types handle invalid protocol data gracefully"""
-    #     # Missing required top-level fields
-    #     with pytest.raises(KeyError, match="method"):
-    #         InitializeRequest.from_protocol({})
-
-    #     with pytest.raises(KeyError, match="method"):
-    #         InitializedNotification.from_protocol({"params": {}})
-
-    #     # Missing required nested fields (let Pydantic handle with ValidationError)
-    #     with pytest.raises(ValidationError):
-    #         InitializeRequest.from_protocol(
-    #             {
-    #                 "method": "initialize",
-    #                 "params": {},  # missing clientInfo
-    #             }
-    #         )
-
-    #     # Invalid nested structure (wrong types)
-    #     with pytest.raises(ValidationError):
-    #         InitializeRequest.from_protocol(
-    #             {
-    #                 "method": "initialize",
-    #                 "params": {
-    #                     "clientInfo": "not an object",  # should be dict
-    #                     "protocolVersion": "1.0",
-    #                 },
-    #             }
-    #         )
-
-    #     # Graceful handling of extra unknown fields (should not error)
-    #     data = {
-    #         "method": "initialize",
-    #         "params": {
-    #             "clientInfo": {"name": "test", "version": "1.0"},
-    #             "unknownField": "should be ignored",
-    #             "_meta": {"unknownMeta": "also ignored"},
-    #         },
-    #     }
-    #     request = InitializeRequest.from_protocol(data)  # Should not raise
-    #     assert request.method == "initialize"
-
     def test_request_alias_handling(self):
         """Test that alias handling works correctly"""
         request = InitializeRequest(
