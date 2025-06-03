@@ -146,13 +146,50 @@ class TestSerialization:
         err = Error.from_protocol(data)
         assert err.to_protocol() == data
 
-    def test_error_serializes_exceptions_to_strings(self):
+    def test_error_accepts_exceptions_in_constructor(self):
         err = Error(code=-1, message="test", data=ValueError("test error"))
         result = err.to_protocol()
         assert isinstance(result["data"], str)
         print(result["data"])
         assert "ValueError" in result["data"]
         assert "test error" in result["data"]
+
+    def test_error_accepts_exception_in_protocol_data(self):
+        data = {"code": -1, "message": "test", "data": ValueError("test error")}
+        err = Error.from_protocol(data)
+        assert isinstance(err.data, str)
+        assert "ValueError" in err.data
+        assert "test error" in err.data
+
+    def test_error_preserves_empty_string_data(self):
+        err = Error(code=-1, message="test", data="")
+        result = err.to_protocol()
+        assert result["data"] == ""
+
+    def test_error_preserves_empty_dict_data(self):
+        err = Error(code=-1, message="test", data={})
+        result = err.to_protocol()
+        assert result["data"] == {}
+
+    def test_error_captures_exception_chain(self):
+        try:
+            try:
+                raise ValueError("inner")
+            except ValueError as e:
+                raise RuntimeError("outer") from e
+        except RuntimeError as exc:
+            err = Error(code=-1, message="test", data=exc)
+            result = err.to_protocol()
+            assert "direct cause" in result["data"] or "caused by" in result["data"]
+            assert "ValueError" in result["data"]
+            assert "inner" in result["data"]
+            assert "RuntimeError" in result["data"]
+            assert "outer" in result["data"]
+
+    def test_error_omits_none_data_from_serialization(self):
+        err1 = Error(code=-1, message="test")
+        err2 = Error(code=-1, message="test", data=None)
+        assert err1.to_protocol() == err2.to_protocol()
 
     def test_cancelled_notification_roundtrips_with_id_alias(self):
         protocol_data = {
