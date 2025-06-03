@@ -1,13 +1,21 @@
 import traceback
-from typing import Any
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    AnyUrl,
+    BaseModel,
+    ConfigDict,
+    Field,
+    UrlConstraints,
+    field_validator,
+)
 
 PROTOCOL_VERSION = "2025-03-26"
 JSONRPC_VERSION = "2.0"
 RequestId = int | str
 ProgressToken = str | int
 Cursor = str
+Role = Literal["user", "assistant"]
 
 
 class ProtocolModel(BaseModel):
@@ -125,6 +133,13 @@ class Error(ProtocolModel):
                 "data": data.get("data"),
             }
         )
+
+
+# --------- Priorities ---------
+class Priority(ProtocolModel):
+    """Priority between 0 (not important) and 1 (very important)"""
+
+    value: float = Field(ge=0, le=1)
 
 
 # --------- Capability Types ----------
@@ -318,6 +333,76 @@ class ListToolsRequest(Request):
             }
         )
 
+
+# --------- Resource Specific ---------
+
+
+class Annotations(ProtocolModel):
+    """Annotations for client. Client can use to decide how objects are displayed.
+
+    Attributes:
+        audience: List of roles, either "user" or "assistant".
+        priority: Priority value between 0 (lowest) and 1 (highest), or None.
+    """
+
+    audience: list[Role] | None = None
+    priority: float | None = None
+
+    @field_validator("priority")
+    @classmethod
+    def validate_priority(cls, v: float | None):
+        if v is not None and not (0 <= v <= 1):
+            raise ValueError("priority must be between 0 and 1")
+        return v
+
+    @field_validator("audience", mode="before")
+    @classmethod
+    def validate_audience(cls, v: str | list[str]):
+        if isinstance(v, str):
+            return [v]
+        return v
+
+    def to_protocol(self) -> dict[str, Any]:
+        """Model dump to dict. Note 'audience' gets serialized to a list!"""
+        return self.model_dump(exclude_none=True)
+
+
+class Resource(ProtocolModel):
+    uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
+    name: str
+    description: str | None = None
+    mime_type: str | None = Field(default=None, alias="mimeType")
+    annotations: Annotations | None = None
+    size_in_bytes: int | None = Field(
+        default=None, alias="size"
+    )  # protocol calls this size
+
+    def to_protocol(self) -> dict[str, Any]:
+        return self.model_dump(exclude_none=True, by_alias=True)
+
+
+class ListResourcesRequest(Request):
+    method: str = Field("resources/list", frozen=True)
+    cursor: Cursor | None = None
+
+    @classmethod
+    def from_protocol(cls, data: dict[str, Any]) -> "ListResourcesRequest":
+        method = data["method"]
+        params = data.get("params", {})
+        cursor = params.get("cursor", None)
+        if method != "resources/list":
+            raise ValueError(
+                f"Can't create ListResourcesRequest from '{method}' method"
+            )
+        return cls.model_validate({"method": method, "cursor": cursor})
+
+
+# class ListResourcesResult(Result):
+#     resources: list[Resources]
+
+#     @classmethod
+#     def from_protocol(cls, data: dict[str, Any]) -> "ListResourcesResult":
+#         pass cls()
 
 # --------- JSON-RPC Types ----------
 

@@ -19,6 +19,7 @@ from pydantic import ValidationError
 from mcp.new_types import (
     JSONRPC_VERSION,
     PROTOCOL_VERSION,
+    Annotations,
     CancelledNotification,
     ClientCapabilities,
     Error,
@@ -29,11 +30,13 @@ from mcp.new_types import (
     JSONRPCNotification,
     JSONRPCRequest,
     JSONRPCResponse,
+    ListResourcesRequest,
     ListToolsRequest,
     Notification,
     Ping,
     ProgressNotification,
     Request,
+    Resource,
     Result,
     ServerCapabilities,
 )
@@ -252,6 +255,39 @@ class TestInitialization:
         assert reconstructed.instructions is None
 
 
+class TestResources:
+    def test_list_resource_request_roundtrip_with_cursor(self):
+        protocol_data = {"method": "resources/list", "params": {"cursor": "xyz"}}
+        req = ListResourcesRequest.from_protocol(protocol_data)
+        assert req.cursor == "xyz"
+        assert req.method == "resources/list"
+        serialized = req.to_protocol()
+        assert serialized == protocol_data
+
+    def test_list_resources_request_rejects_improper_method(self):
+        protocol_data = {"method": "dont_list"}
+        with pytest.raises(ValueError):
+            ListResourcesRequest.from_protocol(protocol_data)
+
+    def test_annotations_serializes_to_empty_dict_with_no_data(self):
+        annotations = Annotations()
+        protocol_data = annotations.to_protocol()
+        assert protocol_data == {}
+
+    def test_annotation_rejects_priorities_out_of_range(self):
+        with pytest.raises(ValidationError):
+            Annotations(priority=100)
+
+    def test_annotation_serialize_with_data(self):
+        annotation = Annotations(audience="user", priority=0.5)
+        protocol_data = annotation.to_protocol()
+        expeceted = {"audience": ["user"], "priority": 0.5}
+        assert protocol_data == expeceted
+
+    def test_resource_serializes_with_annotation(self):
+        resource = Resource()
+
+
 class TestTools:
     def test_list_tools_wire_format(self):
         # Verify JSON matches spec exactly
@@ -336,6 +372,18 @@ class TestJSONRPCSerializing:
                 "clientInfo": {"name": "Test client", "version": "1"},
                 "capabilities": {},
             },
+        }
+        assert wire_data == expected_data
+
+    def test_serializes_with_cursor_for_pagination(self):
+        req = ListResourcesRequest(cursor="xyz")
+        jsonrpc_req = JSONRPCRequest.from_request(req, id=1)
+        wire_data = jsonrpc_req.to_wire()
+        expected_data = {
+            "jsonrpc": JSONRPC_VERSION,
+            "id": 1,
+            "method": "resources/list",
+            "params": {"cursor": "xyz"},
         }
         assert wire_data == expected_data
 
