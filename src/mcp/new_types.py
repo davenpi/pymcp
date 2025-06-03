@@ -340,7 +340,9 @@ class JSONRPCRequest(ProtocolModel):
 
     def to_request(self, request_cls: type[Request]) -> Request:
         """Convert back to a Request object"""
-        protocol_data = self.model_dump(exclude={"jsonrpc", "id"}, exclude_none=True)
+        protocol_data: dict[str, Any] = {"method": self.method}
+        if self.params is not None:
+            protocol_data["params"] = self.params
         return request_cls.from_protocol(protocol_data)
 
     def to_wire(self) -> dict[str, Any]:
