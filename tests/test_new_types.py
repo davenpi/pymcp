@@ -127,7 +127,7 @@ class TestSerialization:
             Result.from_protocol(protocol_data)
 
     def test_error_rejects_missing_code(self):
-        with pytest.raises(ValidationError):
+        with pytest.raises(KeyError):
             Error.from_protocol({"message": "test"})
 
     def test_error_rejects_non_integer_code(self):
@@ -135,7 +135,7 @@ class TestSerialization:
             Error.from_protocol({"code": "not_an_int", "message": "test"})
 
     def test_error_rejects_missing_message(self):
-        with pytest.raises(ValidationError):
+        with pytest.raises(KeyError):
             Error.from_protocol({"code": -1, "data": "test"})
 
     def test_error_rejects_int_data(self):
@@ -294,8 +294,15 @@ class TestTools:
         assert reconstructed.progress_token is None
         assert reconstructed.method == "tools/list"
 
-    def test_list_tools_request_round_trip(self):
-        # Happy path: object → protocol → object
+    def test_list_tools_from_protocol_with_no_data_roundtrips_to_method_only(self):
+        protocol_data = {"method": "tools/list"}
+        request = ListToolsRequest.from_protocol(protocol_data)
+        assert request.method == "tools/list"
+        assert request.cursor is None
+        assert request.progress_token is None
+        assert request.to_protocol() == protocol_data
+
+    def test_list_tools_request_round_trip_with_cursor_and_progress_token(self):
         request = ListToolsRequest(
             cursor="123",
             progress_token="456",

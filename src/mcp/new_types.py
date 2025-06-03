@@ -118,10 +118,16 @@ class Error(ProtocolModel):
 
     @classmethod
     def from_protocol(cls, data: dict[str, Any]) -> "Error":
-        return cls(**data)
+        return cls.model_validate(
+            {
+                "code": data["code"],
+                "message": data["message"],
+                "data": data.get("data"),
+            }
+        )
 
 
-# Capability Types
+# --------- Capability Types ----------
 
 
 class RootsCapability(ProtocolModel):
@@ -161,7 +167,7 @@ class ServerCapabilities(ProtocolModel):
     tools: ToolsCapability | None = None
 
 
-## Initialization Types
+# --------- Initialization Types ----------
 
 
 class InitializeRequest(Request):
@@ -175,16 +181,19 @@ class InitializeRequest(Request):
     @classmethod
     def from_protocol(cls, data: dict[str, Any]) -> "InitializeRequest":
         """Convert from protocol-level representation"""
-        params = data.get("params", {})
-        meta = params.get("_meta", {})
+        params = data["params"]
+        method = data["method"]
+        if method != "initialize":
+            raise ValueError(f"Can't create InitializeRequest from '{method}' method")
 
-        flattened = {
-            "method": data["method"],
-            "progress_token": meta.get("progressToken"),
-            **{k: v for k, v in params.items() if k != "_meta"},
-        }
-
-        return cls(**flattened)
+        return cls.model_validate(
+            {
+                "method": "initialize",
+                "protocol_version": params["protocolVersion"],
+                "client_info": params["clientInfo"],
+                "capabilities": params["capabilities"],
+            }
+        )
 
 
 class InitializedNotification(Notification):
@@ -192,15 +201,12 @@ class InitializedNotification(Notification):
 
     @classmethod
     def from_protocol(cls, data: dict[str, Any]) -> "InitializedNotification":
-        params = data.get("params", {})
-        _ = params.get("_meta", {})
-
-        flattened = {
-            "method": data["method"],
-            **{k: v for k, v in params.items() if k != "_meta"},
-        }
-
-        return cls(**flattened)
+        method = data["method"]
+        if method != "notifications/initialized":
+            raise ValueError(
+                f"Can't create InitializedNotification from '{method}' method"
+            )
+        return cls()
 
 
 class InitializeResult(Result):
@@ -211,14 +217,17 @@ class InitializeResult(Result):
 
     @classmethod
     def from_protocol(cls, data: dict[str, Any]) -> "InitializeResult":
-        flattened = {
-            **{k: v for k, v in data.items() if k != "_meta"},
-        }
+        return cls.model_validate(
+            {
+                "protocol_version": data["protocolVersion"],
+                "capabilities": data["capabilities"],
+                "server_info": data["serverInfo"],
+                "instructions": data.get("instructions"),
+            }
+        )
 
-        return cls(**flattened)
 
-
-# --------- One off types ----------
+# --------- One-off types ----------
 
 
 class Ping(Request):
@@ -239,9 +248,19 @@ class CancelledNotification(Notification):
 
     @classmethod
     def from_protocol(cls, data: dict[str, Any]) -> "CancelledNotification":
+        method = data["method"]
         params = data["params"]
-        flattened = {"method": data["method"], **params}
-        return cls(**flattened)
+        if method != "notifications/cancelled":
+            raise ValueError(
+                f"Can't create CancelledNotification from '{method}' method"
+            )
+        return cls.model_validate(
+            {
+                "method": method,
+                "request_id": params["requestId"],
+                "reason": params.get("reason"),
+            }
+        )
 
 
 class ProgressNotification(Notification):
@@ -270,31 +289,36 @@ class ProgressNotification(Notification):
         )
 
 
-# ---------- Tool Specific ----------
+# --------- Tool Specific ----------
 
 
 class ListToolsRequest(Request):
+    """List tools request.
+
+    Cursor is opaque. No direct relation to the server's state.
+    """
+
     method: str = Field(default="tools/list", frozen=True)
-    cursor: Cursor | None = None  # Cursor string is opaque. No meaning.
+    cursor: Cursor | None = None
 
     @classmethod
     def from_protocol(cls, data: dict[str, Any]) -> "ListToolsRequest":
         """Convert from protocol-level representation"""
+        method = data["method"]
         params = data.get("params", {})
         meta = params.get("_meta", {})
+        if method != "tools/list":
+            raise ValueError(f"Can't create ListToolsRequest from '{method}' method")
+        return cls.model_validate(
+            {
+                "method": method,
+                "progress_token": meta.get("progressToken"),
+                "cursor": params.get("cursor"),
+            }
+        )
 
-        flattened = {
-            "method": data["method"],
-            "progress_token": meta.get("progressToken"),
-            **{k: v for k, v in params.items() if k != "_meta"},
-        }
 
-        return cls(**flattened)
-
-
-#
-
-## JSON-RPC Types
+# --------- JSON-RPC Types ----------
 
 
 class JSONRPCRequest(ProtocolModel):
