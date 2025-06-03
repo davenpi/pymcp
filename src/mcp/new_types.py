@@ -295,7 +295,8 @@ class ProgressNotification(Notification):
 class ListToolsRequest(Request):
     """List tools request.
 
-    Cursor is opaque. No direct relation to the server's state.
+    Cursor is opaque. No direct relation to the server's state. If it's provided,
+    the server should return the next page of tools.
     """
 
     method: str = Field(default="tools/list", frozen=True)
