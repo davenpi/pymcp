@@ -210,7 +210,7 @@ class InitializedNotification(Notification):
 
 
 class InitializeResult(Result):
-    protocol_version: str = Field(alias="protocolVersion")
+    protocol_version: str = Field(default=PROTOCOL_VERSION, alias="protocolVersion")
     capabilities: ServerCapabilities
     server_info: Implementation = Field(alias="serverInfo")
     instructions: str | None = None
@@ -377,7 +377,11 @@ class JSONRPCResponse(ProtocolModel):
 
     def to_wire(self) -> dict[str, Any]:
         """Convert to wire format (spec-compliant JSON-RPC)"""
-        return self.model_dump(exclude_none=True, by_alias=True)
+        protocol_data: dict[str, Any] = {}
+        protocol_data["result"] = self.result.to_protocol()
+        protocol_data["jsonrpc"] = self.jsonrpc
+        protocol_data["id"] = self.id
+        return protocol_data
 
 
 class JSONRPCError(ProtocolModel):
@@ -396,4 +400,8 @@ class JSONRPCError(ProtocolModel):
 
     def to_wire(self) -> dict[str, Any]:
         """Convert to wire format (spec-compliant JSON-RPC)"""
-        return self.model_dump(exclude_none=True)
+        protocol_data: dict[str, Any] = {}
+        protocol_data["error"] = self.error.to_protocol()
+        protocol_data["jsonrpc"] = self.jsonrpc
+        protocol_data["id"] = self.id
+        return protocol_data
