@@ -27,6 +27,7 @@ from mcp.new_types import (
     ListToolsRequest,
     Notification,
     Ping,
+    ProgressNotification,
     Request,
     Result,
     ServerCapabilities,
@@ -309,3 +310,22 @@ class TestTools:
     def test_list_tools_request_wire_format(self):
         # Verify JSON matches spec exactly
         pass
+
+    def test_progress_notification_roundtrip(self):
+        protocol_data = {
+            "method": "notifications/progress",
+            "params": {
+                "progressToken": "progress_token",
+                "progress": 0.5,
+                "total": 100,
+                "message": "test",
+            },
+        }
+        notif = ProgressNotification.from_protocol(protocol_data)
+        assert notif.method == "notifications/progress"
+        assert notif.progress_token == "progress_token"
+        assert notif.progress == 0.5
+        assert notif.total == 100
+        assert notif.message == "test"
+        serialized = notif.to_protocol()
+        assert serialized == protocol_data

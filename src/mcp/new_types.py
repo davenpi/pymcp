@@ -244,23 +244,30 @@ class CancelledNotification(Notification):
         return cls(**flattened)
 
 
-# class ProgressNotification(Notification):
-#     method: str = Field(default="notifications/progress", frozen=True)
-#     progress_token: ProgressToken = Field(alias="progressToken")
-#     progress: float | int
-#     total: float | int
-#     message: str | None = None
+class ProgressNotification(Notification):
+    method: str = Field(default="notifications/progress", frozen=True)
+    progress_token: ProgressToken = Field(alias="progressToken")
+    progress: float | int
+    total: float | int
+    message: str | None = None
 
-#     @classmethod
-#     def from_protocol(cls, data: dict[str, Any]) -> "ProgressNotification":
-#         params: dict[str, int | float| str] = data["params"]
-#         method = data["method"]
-#         if method != "notifications/progress":
-#             raise ValueError(
-#                 f"Can't create ProgressNotification from '{method}' method"
-#             )
-#         flattened = {"method": method, **params}
-#         return cls(**flattened)
+    @classmethod
+    def from_protocol(cls, data: dict[str, Any]) -> "ProgressNotification":
+        params = data["params"]
+        method = data["method"]
+        if method != "notifications/progress":
+            raise ValueError(
+                f"Can't create ProgressNotification from '{method}' method"
+            )
+        return cls.model_validate(
+            {
+                "method": data["method"],
+                "progress_token": params["progressToken"],
+                "progress": params["progress"],
+                "total": params["total"],
+                "message": params.get("message"),
+            }
+        )
 
 
 # ---------- Tool Specific ----------
