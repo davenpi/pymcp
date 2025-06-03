@@ -92,33 +92,22 @@ INTERNAL_ERROR = -32603
 
 
 class Error(ProtocolModel):
+    """MCP Error type.
+
+    The 'data' field accepts str, dict, Exception, or None.
+    Exceptions are automatically formatted for transmission.
+    """
+
     code: int
     message: str
-    # Accepts: str (error details), dict (structured data), Exception (auto-formatted),
-    # or None
-    data: Any = None
+    data: str | dict[str, Any] | None = None
 
-    # TODO: Problem is class signature does not match `Any` hint in constructor
     @field_validator("data", mode="before")
     @classmethod
-    def transform_data(
-        cls, value: str | dict[str, Any] | Exception | None
-    ) -> str | dict[str, Any] | None:
+    def transform_data(cls, value: Any) -> str | dict[str, Any] | None:
         if isinstance(value, Exception):
             return cls._format_exception(value)
         return value
-
-    # @field_validator("data", mode="before")
-    # @classmethod
-    # def transform_data(cls, value: Any) -> Any:
-    #     if isinstance(value, Exception):
-    #         return cls._format_exception(value)
-    #     # Could add runtime validation for other unwanted types here
-    #     if not isinstance(value, (str, dict, type(None), Exception)):
-    #         raise ValueError(
-    #             f"data must be str, dict, Exception, or None, got {type(value)}"
-    #         )
-    #     return value
 
     def to_protocol(self) -> dict[str, Any]:
         return self.model_dump(exclude_none=True)
@@ -253,6 +242,25 @@ class CancelledNotification(Notification):
         params = data["params"]
         flattened = {"method": data["method"], **params}
         return cls(**flattened)
+
+
+# class ProgressNotification(Notification):
+#     method: str = Field(default="notifications/progress", frozen=True)
+#     progress_token: ProgressToken = Field(alias="progressToken")
+#     progress: float | int
+#     total: float | int
+#     message: str | None = None
+
+#     @classmethod
+#     def from_protocol(cls, data: dict[str, Any]) -> "ProgressNotification":
+#         params: dict[str, int | float| str] = data["params"]
+#         method = data["method"]
+#         if method != "notifications/progress":
+#             raise ValueError(
+#                 f"Can't create ProgressNotification from '{method}' method"
+#             )
+#         flattened = {"method": method, **params}
+#         return cls(**flattened)
 
 
 # ---------- Tool Specific ----------

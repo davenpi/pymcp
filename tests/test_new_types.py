@@ -137,6 +137,10 @@ class TestSerialization:
         with pytest.raises(ValidationError):
             Error.from_protocol({"code": -1, "data": "test"})
 
+    def test_error_rejects_int_data(self):
+        with pytest.raises(ValidationError):
+            Error.from_protocol({"code": -1, "message": "test", "data": 1})
+
     def test_error_preserves_nested_dict_data_roundtrip(self):
         data = {"code": -1, "message": "test", "data": {"field": "email"}}
         err = Error.from_protocol(data)

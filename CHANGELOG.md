@@ -48,3 +48,8 @@ export interface JSONRPCError {
 
 zero guidance on what `data` should be. Kind of confusing for me and users. What should
 I put there?
+
+Clear that `data` description was taken from JSON RPC 2.0 spec. THe thing is—we're not
+building a general JSON RPC library, we're just using that for transport. Let's try
+to get more concrete about this based on usage. Understandable that they didn't have
+much to go off of when writing the spec.
