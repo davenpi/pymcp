@@ -325,29 +325,40 @@ class ListToolsRequest(Request):
 class JSONRPCRequest(ProtocolModel):
     jsonrpc: str = Field(default=JSONRPC_VERSION, frozen=True)
     id: RequestId
-    method: str
-    params: dict[str, Any] | None = None
+    request: Request
 
     @classmethod
     def from_request(cls, request: Request, id: RequestId) -> "JSONRPCRequest":
         """Convert from Request to JSONRPCRequest"""
-        protocol_data = request.to_protocol()
-        return cls(
-            id=id,
-            method=protocol_data["method"],
-            params=protocol_data.get("params"),
-        )
+        return cls(id=id, request=request)
 
-    def to_request(self, request_cls: type[Request]) -> Request:
+    def to_request(self) -> Request:
         """Convert back to a Request object"""
-        protocol_data: dict[str, Any] = {"method": self.method}
-        if self.params is not None:
-            protocol_data["params"] = self.params
-        return request_cls.from_protocol(protocol_data)
+        return self.request
 
     def to_wire(self) -> dict[str, Any]:
         """Convert to wire format (spec-compliant JSON-RPC)"""
-        return self.model_dump(exclude_none=True, by_alias=True)
+        protocol_data = self.request.to_protocol()
+        protocol_data["jsonrpc"] = self.jsonrpc
+        protocol_data["id"] = self.id
+        return protocol_data
+
+
+class JSONRPCNotification(ProtocolModel):
+    jsonrpc: str = Field(default=JSONRPC_VERSION, frozen=True)
+    notification: Notification
+
+    @classmethod
+    def from_notification(cls, notification: Notification) -> "JSONRPCNotification":
+        return cls(notification=notification)
+
+    def to_notification(self) -> Notification:
+        return self.notification
+
+    def to_wire(self) -> dict[str, Any]:
+        protocol_data = self.notification.to_protocol()
+        protocol_data["jsonrpc"] = self.jsonrpc
+        return protocol_data
 
 
 class JSONRPCResponse(ProtocolModel):

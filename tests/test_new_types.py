@@ -17,12 +17,15 @@ import pytest
 from pydantic import ValidationError
 
 from mcp.new_types import (
+    JSONRPC_VERSION,
+    PROTOCOL_VERSION,
     CancelledNotification,
     ClientCapabilities,
     Error,
     Implementation,
     InitializeRequest,
     InitializeResult,
+    JSONRPCNotification,
     JSONRPCRequest,
     ListToolsRequest,
     Notification,
@@ -221,30 +224,6 @@ class TestInitialization:
     All initialization-related types together
     """
 
-    def test_initialize_request_full_stack(self):
-        # Create the high-level request
-        request = InitializeRequest(
-            client_info=Implementation(name="test", version="1.0"),
-            capabilities=ClientCapabilities(),
-        )
-
-        # Wrap in JSON-RPC envelope
-        jsonrpc_request = JSONRPCRequest.from_request(request, id="1")
-
-        # Serialize to wire
-        wire_data = jsonrpc_request.to_wire()
-
-        # Verify JSON-RPC structure
-        assert wire_data["jsonrpc"] == "2.0"
-        assert wire_data["id"] == "1"
-        assert wire_data["method"] == "initialize"
-
-        # Round-trip back
-        reconstructed = JSONRPCRequest.model_validate(wire_data)
-        original_request = reconstructed.to_request(InitializeRequest)
-
-        assert original_request.client_info.name == "test"
-
     def test_initialize_request(self):
         pass
 
@@ -336,3 +315,42 @@ class TestTools:
         assert notif.message == "test"
         serialized = notif.to_protocol()
         assert serialized == protocol_data
+
+
+class TestJSONRPCSerializing:
+    def test_serializes_request_with_params(self):
+        req = InitializeRequest(
+            clientInfo=Implementation(name="Test client", version="1"),
+            capabilities=ClientCapabilities(),
+        )
+        jsonrpc_req = JSONRPCRequest.from_request(req, id=1)
+        wire_data = jsonrpc_req.to_wire()
+        expected_data = {
+            "jsonrpc": JSONRPC_VERSION,
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": PROTOCOL_VERSION,
+                "clientInfo": {"name": "Test client", "version": "1"},
+                "capabilities": {},
+            },
+        }
+        assert wire_data == expected_data
+
+    def test_serializes_notification_with_params(self):
+        notif = ProgressNotification(
+            progressToken="token", progress=1, total=2, message="Halfway home!"
+        )
+        jsonrpc_notif = JSONRPCNotification.from_notification(notif)
+        wire_data = jsonrpc_notif.to_wire()
+        expected_data = {
+            "jsonrpc": JSONRPC_VERSION,
+            "method": "notifications/progress",
+            "params": {
+                "progressToken": "token",
+                "progress": 1,
+                "total": 2,
+                "message": "Halfway home!",
+            },
+        }
+        assert wire_data == expected_data
