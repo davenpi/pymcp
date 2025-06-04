@@ -1,5 +1,5 @@
 import traceback
-from typing import Annotated, Any, ClassVar, Literal, TypeVar
+from typing import Annotated, Any, Literal, TypeVar
 
 from pydantic import (
     AnyUrl,
@@ -34,7 +34,6 @@ class Request(ProtocolModel):
     the `progress_token` field takes precedence.
     """
 
-    expected_method: ClassVar[str] = ""
     method: str
     progress_token: ProgressToken | None = None
     metadata: dict[str, Any] | None = Field(default=None)
@@ -55,9 +54,11 @@ class Request(ProtocolModel):
     @classmethod
     def from_protocol(cls: type[T_Request], data: dict[str, Any]) -> T_Request:
         """Convert from protocol-level representation."""
-        if cls.expected_method:
+        method_field = cls.model_fields.get("method")
+        if method_field and isinstance(method_field.default, str):
+            expected_method = method_field.default
             actual_method = data.get("method")
-            if actual_method != cls.expected_method:
+            if actual_method != expected_method:
                 raise ValueError(
                     f"Can't create {cls.__name__} from '{actual_method}' method"
                 )
@@ -75,7 +76,7 @@ class Request(ProtocolModel):
         # Handle general metadata (excluding progressToken which we handle specially)
         if meta:
             general_meta = {k: v for k, v in meta.items() if k != "progressToken"}
-            if general_meta:  # Only set if there's actually other metadata
+            if general_meta:
                 kwargs["metadata"] = general_meta
 
         # Add subclass-specific fields, respecting aliases
@@ -114,7 +115,6 @@ class Request(ProtocolModel):
 
 
 class Notification(ProtocolModel):
-    expected_method: ClassVar[str] = ""
     method: str
     metadata: dict[str, Any] | None = Field(default=None)
 
@@ -124,9 +124,11 @@ class Notification(ProtocolModel):
     ) -> T_Notification:
         """Convert from protocol-level representation"""
         # Validate method if this is a concrete subclass
-        if cls.expected_method:
+        method_field = cls.model_fields.get("method")
+        if method_field and isinstance(method_field.default, str):
+            expected_method = method_field.default
             actual_method = data.get("method")
-            if actual_method != cls.expected_method:
+            if actual_method != expected_method:
                 raise ValueError(
                     f"Can't create {cls.__name__} from '{actual_method}' method"
                 )
@@ -312,7 +314,6 @@ class ServerCapabilities(ProtocolModel):
 
 
 class InitializeRequest(Request):
-    expected_method: ClassVar[str] = "initialize"
     method: str = Field(default="initialize", frozen=True)
     protocol_version: str = Field(
         default=PROTOCOL_VERSION, alias="protocolVersion", frozen=True
@@ -322,7 +323,6 @@ class InitializeRequest(Request):
 
 
 class InitializedNotification(Notification):
-    expected_method: ClassVar[str] = "notifications/initialized"
     method: str = Field(default="notifications/initialized", frozen=True)
 
 
@@ -337,19 +337,16 @@ class InitializeResult(Result):
 
 
 class Ping(Request):
-    expected_method: ClassVar[str] = "ping"
     method: str = Field(default="ping", frozen=True)
 
 
 class CancelledNotification(Notification):
-    expected_method: ClassVar[str] = "notifications/cancelled"
     method: str = Field(default="notifications/cancelled", frozen=True)
     request_id: RequestId = Field(alias="requestId")
     reason: str | None = None
 
 
 class ProgressNotification(Notification):
-    expected_method: ClassVar[str] = "notifications/progress"
     method: str = Field(default="notifications/progress", frozen=True)
     progress_token: ProgressToken = Field(alias="progressToken")
     progress: float | int
@@ -367,7 +364,6 @@ class ListToolsRequest(Request):
     the server should return the next page of tools.
     """
 
-    expected_method: ClassVar[str] = "tools/list"
     method: str = Field(default="tools/list", frozen=True)
     cursor: Cursor | None = None
 
@@ -420,7 +416,6 @@ class Resource(ProtocolModel):
 
 
 class ListResourcesRequest(Request):
-    expected_method: ClassVar[str] = "resources/list"
     method: str = Field("resources/list", frozen=True)
     cursor: Cursor | None = None
 
