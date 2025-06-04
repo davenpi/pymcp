@@ -283,9 +283,72 @@ class TestResources:
         protocol_data = annotation.to_protocol()
         expeceted = {"audience": ["user"], "priority": 0.5}
         assert protocol_data == expeceted
+    
+    def test_normalizes_uri_to_end_with_slash_when_serializing(self):
+        resource = Resource(uri="https://example.com", name="Example")
+        expected = {
+            "uri": "https://example.com/",
+            "name": "Example",
+        }
+        assert resource.to_protocol() == expected
 
     def test_resource_serializes_with_annotation(self):
-        resource = Resource()
+        resource = Resource(
+            uri="https://example.com",
+            name="Example",
+            annotations=Annotations(audience="user", priority=0.5),
+        )
+        expected = {
+            "uri": "https://example.com/",
+            "name": "Example",
+            "annotations": {"audience": ["user"], "priority": 0.5},
+        }
+        print("expected", expected)
+        print("resource", resource.to_protocol())
+        assert resource.to_protocol() == expected
+    
+    def test_resource_rejects_invalid_uri(self):
+        with pytest.raises(ValidationError):
+            Resource(uri="not-a-uri", name="Test")
+    
+    def test_resource_accepts_various_uri_schemes(self):
+        test_cases = [
+            "file:///path/to/file.txt",
+            "data:text/plain;base64,SGVsbG8=",
+            "custom-scheme:resource-id",
+            "urn:isbn:1234567890"
+        ]
+        for uri in test_cases:
+            resource = Resource(uri=uri, name="Test")
+            print("resource", resource.uri)
+            assert resource.uri is not None
+    
+    def test_resource_uses_protocol_aliases_for_serialization(self):
+        resource = Resource(
+            uri="file:///test.txt",
+            name="Test File",
+            mime_type="text/plain",
+            size_in_bytes=1024
+        )
+        result = resource.to_protocol()
+        assert result["mimeType"] == "text/plain"
+        assert result["size"] == 1024
+        assert "mime_type" not in result
+        assert "size_in_bytes" not in result
+    
+    def test_resource_normalizes_uri_schemes_as_expected(self):
+        test_cases = [
+            ("https://example.com", "https://example.com/"),  # Gets trailing slash
+            ("http://example.com", "http://example.com/"),    # Gets trailing slash  
+            ("file:///path/to/file.txt", "file:///path/to/file.txt"),  # No change
+            ("data:text/plain;base64,SGVsbG8=", "data:text/plain;base64,SGVsbG8="),  # No change
+            ("custom-scheme:resource-id", "custom-scheme:resource-id"),  # No change
+            ("urn:isbn:1234", "urn:isbn:1234"),  # No change
+        ]
+        
+        for input_uri, expected_uri in test_cases:
+            resource = Resource(uri=input_uri, name="Test")
+            assert str(resource.uri) == expected_uri
 
 
 class TestTools:
