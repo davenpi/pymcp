@@ -144,13 +144,6 @@ class TestSerialization:
         res = Result()
         assert res is not None
 
-    def test_result_serialization_not_implemented(self):
-        protocol_data = {
-            "test": "result",
-        }
-        with pytest.raises(NotImplementedError):
-            Result.from_protocol(protocol_data)
-
     def test_error_rejects_missing_code(self):
         with pytest.raises(KeyError):
             Error.from_protocol({"message": "test"})
@@ -273,11 +266,39 @@ class TestInitialization:
         print("-" * 100)
         print("reconstructed", reconstructed)
         assert reconstructed == result
-        assert reconstructed.protocol_version == "2025-03-26"
-        assert reconstructed.capabilities is not None
-        assert reconstructed.server_info.name == "test_server"
-        assert reconstructed.server_info.version == "1.0"
-        assert reconstructed.instructions is None
+
+    def test_initialize_result_with_metadata_roundtrips(self):
+        protocol_data = {
+            "protocolVersion": "not_a_version",
+            "capabilities": {},
+            "serverInfo": {"name": "test_server", "version": "1.0"},
+            "_meta": {"some": "metadata"},
+        }
+        result = InitializeResult.from_protocol(protocol_data)
+        assert result.metadata == {"some": "metadata"}
+        serialized = result.to_protocol()
+        assert serialized == protocol_data
+
+    def test_initialize_result_ignores_empty_metadata(self):
+        protocol_data = {
+            "protocolVersion": "not_a_version",
+            "capabilities": {},
+            "serverInfo": {"name": "test_server", "version": "1.0"},
+            "_meta": {},
+        }
+        result = InitializeResult.from_protocol(protocol_data)
+        assert result.metadata is None
+        serialized = result.to_protocol()
+        assert "_meta" not in serialized
+
+    def test_initialize_result_does_not_serialize_metadata_if_empty(self):
+        result = InitializeResult(
+            protocol_version="not_a_version",
+            capabilities=ServerCapabilities(),
+            server_info=Implementation(name="test_server", version="1.0"),
+        )
+        serialized = result.to_protocol()
+        assert "_meta" not in serialized
 
 
 class TestResources:

@@ -19,6 +19,7 @@ Role = Literal["user", "assistant"]
 
 T_Request = TypeVar("T_Request", bound="Request")
 T_Notification = TypeVar("T_Notification", bound="Notification")
+T_Result = TypeVar("T_Result", bound="Result")
 
 
 class ProtocolModel(BaseModel):
@@ -173,12 +174,48 @@ class Notification(ProtocolModel):
 
 
 class Result(ProtocolModel):
-    def to_protocol(self) -> dict[str, Any]:
-        return self.model_dump(by_alias=True, exclude_none=True)
+    metadata: dict[str, Any] | None = Field(default=None)
 
     @classmethod
-    def from_protocol(cls, data: dict[str, Any]) -> "Result":
-        raise NotImplementedError("Use concrete Result subclasses")
+    def from_protocol(cls: type[T_Result], data: dict[str, Any]) -> T_Result:
+        """Convert from protocol-level representation."""
+
+        # Extract metadata
+        meta = data.get("_meta", {})
+
+        # Build kwargs for the constructor
+        kwargs: dict[str, Any] = {}
+
+        # Handle metadata
+        if meta:
+            kwargs["metadata"] = meta
+
+        # Add subclass-specific fields, respecting aliases
+        for field_name, field_info in cls.model_fields.items():
+            if field_name == "metadata":
+                continue
+
+            # Use the alias if it exists, otherwise use the field name
+            param_key = field_info.alias if field_info.alias else field_name
+
+            if param_key in data:
+                kwargs[field_name] = data[param_key]
+
+        return cls(**kwargs)
+
+    def to_protocol(self) -> dict[str, Any]:
+        """Convert to protocol-level representation"""
+        result = self.model_dump(
+            exclude={"metadata"},
+            by_alias=True,
+            exclude_none=True,
+        )
+
+        # Add metadata if present
+        if self.metadata:
+            result["_meta"] = self.metadata
+
+        return result
 
 
 PARSE_ERROR = -32700
@@ -285,16 +322,8 @@ class InitializeRequest(Request):
 
 
 class InitializedNotification(Notification):
+    expected_method: ClassVar[str] = "notifications/initialized"
     method: str = Field(default="notifications/initialized", frozen=True)
-
-    @classmethod
-    def from_protocol(cls, data: dict[str, Any]) -> "InitializedNotification":
-        method = data["method"]
-        if method != "notifications/initialized":
-            raise ValueError(
-                f"Can't create InitializedNotification from '{method}' method"
-            )
-        return cls()
 
 
 class InitializeResult(Result):
@@ -302,17 +331,6 @@ class InitializeResult(Result):
     capabilities: ServerCapabilities
     server_info: Implementation = Field(alias="serverInfo")
     instructions: str | None = None
-
-    @classmethod
-    def from_protocol(cls, data: dict[str, Any]) -> "InitializeResult":
-        return cls.model_validate(
-            {
-                "protocol_version": data["protocolVersion"],
-                "capabilities": data["capabilities"],
-                "server_info": data["serverInfo"],
-                "instructions": data.get("instructions"),
-            }
-        )
 
 
 # --------- One-off types ----------
