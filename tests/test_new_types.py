@@ -71,15 +71,32 @@ class TestSerialization:
         assert serialized == original_data
         assert protocol_data == original_data
 
-    def test_request_ignores_params_if_no_progress_token_metadata(self):
+    def test_request_accepts_progress_token_in_metadata(self):
+        protocol_data = {
+            "method": "test",
+            "params": {"_meta": {"progressToken": "123"}},
+        }
+        req = Request.from_protocol(protocol_data)
+        assert req.progress_token == "123"
+
+    def test_request_rejects_bad_progress_token_in_metadata(self):
+        protocol_data = {
+            "method": "test",
+            "params": {"_meta": {"progressToken": 1.9}},
+        }
+        with pytest.raises(ValidationError):
+            Request.from_protocol(protocol_data)
+
+    def test_request_gets_non_progress_token_metadata(self):
         protocol_data = {
             "method": "req",
             "params": {"testing": "hi", "_meta": {"not_a_progress_token": "not"}},
         }
         req = Request.from_protocol(protocol_data)
+        assert req.metadata == {"not_a_progress_token": "not"}
         serialized = req.to_protocol()
         assert serialized["method"] == "req"
-        assert "params" not in serialized
+        assert serialized["params"]["_meta"]["not_a_progress_token"] == "not"
 
     def test_request_converts_snake_case_to_camelCase_output(self):
         req = Request(

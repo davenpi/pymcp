@@ -26,9 +26,30 @@ class ProtocolModel(BaseModel):
 
 
 class Request(ProtocolModel):
+    """
+    Base class for MCP requests.
+
+    Note: If you set both `progress_token` and `metadata["progressToken"]`,
+    the `progress_token` field takes precedence.
+    """
+
     expected_method: ClassVar[str] = ""
     method: str
     progress_token: ProgressToken | None = None
+    metadata: dict[str, Any] | None = Field(default=None)
+
+    @field_validator("metadata", mode="before")
+    @classmethod
+    def validate_progress_token_in_metadata(cls, v: dict[str, Any] | None):
+        if v and "progressToken" in v:
+            token = v["progressToken"]
+            if not isinstance(token, ProgressToken):
+                raise ValueError(
+                    f"progressToken in metadata must be str or int, got "
+                    f"{type(token).__name__}. Consider using the progress_token field"
+                    "instead."
+                )
+        return v
 
     @classmethod
     def from_protocol(cls: type[T_Request], data: dict[str, Any]) -> T_Request:
@@ -50,32 +71,39 @@ class Request(ProtocolModel):
             "progress_token": meta.get("progressToken"),
         }
 
+        # Handle general metadata (excluding progressToken which we handle specially)
+        if meta:
+            general_meta = {k: v for k, v in meta.items() if k != "progressToken"}
+            if general_meta:  # Only set if there's actually other metadata
+                kwargs["metadata"] = general_meta
+
         # Add subclass-specific fields, respecting aliases
         for field_name, field_info in cls.model_fields.items():
-            if field_name in {"method", "progress_token"}:
+            if field_name in {"method", "progress_token", "metadata"}:
                 continue
 
-            # Use the alias if it exists, otherwise use the field name
             param_key = field_info.alias if field_info.alias else field_name
-            print("params", params)
             if param_key in params:
-                print("param_key", param_key)
-                kwargs[field_name] = params[
-                    param_key
-                ]  # Note: kwargs uses field_name, not alias
+                kwargs[field_name] = params[param_key]
 
         return cls(**kwargs)
 
     def to_protocol(self) -> dict[str, Any]:
         """Convert to protocol-level representation"""
         params = self.model_dump(
-            exclude={"method", "progress_token"},
+            exclude={"method", "progress_token", "metadata"},
             by_alias=True,
             exclude_none=True,
         )
 
+        meta: dict[str, Any] = {}
+        if self.metadata:
+            meta.update(self.metadata)
         if self.progress_token is not None:
-            params["_meta"] = {"progressToken": self.progress_token}
+            meta["progressToken"] = self.progress_token
+
+        if meta:
+            params["_meta"] = meta
 
         result: dict[str, Any] = {"method": self.method}
         if params:
