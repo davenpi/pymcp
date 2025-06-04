@@ -6,9 +6,6 @@ from mcp.new_types import ListToolsRequest, ProgressNotification
 
 
 class TestTools:
-    def test_list_tools_wire_format(self):
-        # Verify JSON matches spec exactly
-        pass
 
     def test_call_tool_with_arguments(self):
         # Test the complex case with nested data
