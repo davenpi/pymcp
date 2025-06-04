@@ -31,6 +31,7 @@ from mcp.new_types import (
     JSONRPCRequest,
     JSONRPCResponse,
     ListResourcesRequest,
+    ListResourcesResult,
     ListToolsRequest,
     Notification,
     Ping,
@@ -325,6 +326,48 @@ class TestResources:
         protocol_data = {"method": "dont_list"}
         with pytest.raises(ValueError):
             ListResourcesRequest.from_protocol(protocol_data)
+
+    def test_list_resources_result_roundtrips(self):
+        resource = Resource(
+            uri="https://example.com",
+            name="Example",
+            annotations=Annotations(audience="user", priority=0.5),
+        )
+        res = ListResourcesResult(
+            resources=[resource],
+            next_cursor="next",
+        )
+        protocol_data = res.to_protocol()
+        from_protocol = ListResourcesResult.from_protocol(protocol_data)
+        assert from_protocol == res
+
+    def test_list_resources_uses_alias_for_mime_type(self):
+        resource = Resource(
+            uri="https://example.com",
+            name="Example",
+            mime_type="text/plain",
+        )
+        assert resource.to_protocol()["mimeType"] == "text/plain"
+        assert "mime_type" not in resource.to_protocol()
+
+    def test_resource_serializes_with_size_alias(self):
+        resource = Resource(
+            uri="https://example.com",
+            name="Example",
+            size_in_bytes=1024,
+        )
+        assert resource.to_protocol()["size"] == 1024
+        assert "size_in_bytes" not in resource.to_protocol()
+
+    def test_list_resource_result_serialize_uri_to_string_not_anyurl(self):
+        resource = Resource(
+            uri="https://example.com",
+            name="Example",
+        )
+        result = ListResourcesResult(
+            resources=[resource],
+        )
+        assert result.to_protocol()["resources"][0]["uri"] == "https://example.com/"
 
     def test_annotations_serializes_to_empty_dict_with_no_data(self):
         annotations = Annotations()

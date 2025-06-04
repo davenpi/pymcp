@@ -96,6 +96,7 @@ class Request(ProtocolModel):
             exclude={"method", "progress_token", "metadata"},
             by_alias=True,
             exclude_none=True,
+            mode="json",
         )
 
         meta: dict[str, Any] = {}
@@ -163,6 +164,7 @@ class Notification(ProtocolModel):
             exclude={"method", "metadata"},
             by_alias=True,
             exclude_none=True,
+            mode="json",
         )
 
         result: dict[str, Any] = {"method": self.method}
@@ -211,6 +213,7 @@ class Result(ProtocolModel):
             exclude={"metadata"},
             by_alias=True,
             exclude_none=True,
+            mode="json",
         )
 
         # Add metadata if present
@@ -246,7 +249,7 @@ class Error(ProtocolModel):
         return value
 
     def to_protocol(self) -> dict[str, Any]:
-        return self.model_dump(exclude_none=True)
+        return self.model_dump(exclude_none=True, mode="json")
 
     @staticmethod
     def _format_exception(exc: Exception) -> str:
@@ -398,10 +401,14 @@ class Annotations(ProtocolModel):
 
     def to_protocol(self) -> dict[str, Any]:
         """Model dump to dict. Note 'audience' gets serialized to a list!"""
-        return self.model_dump(exclude_none=True)
+        return self.model_dump(exclude_none=True, mode="json")
 
 
 class Resource(ProtocolModel):
+    """
+    A know resource the server can read from.
+    """
+
     uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
     name: str
     description: str | None = None
@@ -418,6 +425,13 @@ class Resource(ProtocolModel):
 class ListResourcesRequest(Request):
     method: str = Field("resources/list", frozen=True)
     cursor: Cursor | None = None
+
+
+# TODO: How can we get autocompletions in snake_case??
+# TODO: FIX. We're serializing to AnyUrl. No good.
+class ListResourcesResult(Result):
+    resources: list[Resource]
+    next_cursor: Cursor | None = Field(default=None, alias="nextCursor")
 
 
 # class ListResourcesResult(Result):
