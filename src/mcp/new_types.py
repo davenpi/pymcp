@@ -40,16 +40,16 @@ class Request(ProtocolModel):
 
     @field_validator("metadata", mode="before")
     @classmethod
-    def validate_progress_token_in_metadata(cls, v: dict[str, Any] | None):
-        if v and "progressToken" in v:
-            token = v["progressToken"]
+    def validate_progress_token_in_metadata(cls, metadata: dict[str, Any] | None):
+        if metadata and "progressToken" in metadata:
+            token = metadata["progressToken"]
             if not isinstance(token, ProgressToken):
                 raise ValueError(
                     f"progressToken in metadata must be str or int, got "
-                    f"{type(token).__name__}. Consider using the progress_token field"
+                    f"{type(token).__name__}. Consider using the progress_token field "
                     "instead."
                 )
-        return v
+        return metadata
 
     @classmethod
     def from_protocol(cls: type[T_Request], data: dict[str, Any]) -> T_Request:
