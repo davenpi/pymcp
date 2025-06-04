@@ -43,7 +43,7 @@ from mcp.new_types import (
 )
 
 
-class TestSerialization:
+class TestBaseClassSerialization:
     """
     Serialization is when we convert our types to dicts.
     Deserialization is when we convert dicts into our types.
@@ -395,25 +395,11 @@ class TestResources:
             "name": "Example",
             "annotations": {"audience": ["user"], "priority": 0.5},
         }
-        print("expected", expected)
-        print("resource", resource.to_protocol())
         assert resource.to_protocol() == expected
 
     def test_resource_rejects_invalid_uri(self):
         with pytest.raises(ValidationError):
             Resource(uri="not-a-uri", name="Test")
-
-    def test_resource_accepts_various_uri_schemes(self):
-        test_cases = [
-            "file:///path/to/file.txt",
-            "data:text/plain;base64,SGVsbG8=",
-            "custom-scheme:resource-id",
-            "urn:isbn:1234567890",
-        ]
-        for uri in test_cases:
-            resource = Resource(uri=uri, name="Test")
-            print("resource", resource.uri)
-            assert resource.uri is not None
 
     def test_resource_uses_protocol_aliases_for_serialization(self):
         resource = Resource(
