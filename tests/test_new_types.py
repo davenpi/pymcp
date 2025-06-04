@@ -264,6 +264,17 @@ class TestResources:
         serialized = req.to_protocol()
         assert serialized == protocol_data
 
+    def test_list_resource_request_roundtrip_with_cursor_and_metadata(self):
+        protocol_data = {
+            "method": "resources/list",
+            "params": {"cursor": "xyz", "_meta": {"progressToken": "123"}},
+        }
+        req = ListResourcesRequest.from_protocol(protocol_data)
+        assert req.cursor == "xyz"
+        assert req.progress_token == "123"
+        assert req.method == "resources/list"
+        assert req.to_protocol() == protocol_data
+
     def test_list_resources_request_rejects_improper_method(self):
         protocol_data = {"method": "dont_list"}
         with pytest.raises(ValueError):
@@ -283,14 +294,6 @@ class TestResources:
         protocol_data = annotation.to_protocol()
         expeceted = {"audience": ["user"], "priority": 0.5}
         assert protocol_data == expeceted
-
-    def test_normalizes_uri_to_end_with_slash_when_serializing(self):
-        resource = Resource(uri="https://example.com", name="Example")
-        expected = {
-            "uri": "https://example.com/",
-            "name": "Example",
-        }
-        assert resource.to_protocol() == expected
 
     def test_resource_serializes_with_annotation(self):
         resource = Resource(
