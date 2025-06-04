@@ -17,7 +17,8 @@ ProgressToken = str | int
 Cursor = str
 Role = Literal["user", "assistant"]
 
-T = TypeVar("T", bound="Request")
+T_Request = TypeVar("T_Request", bound="Request")
+T_Notification = TypeVar("T_Notification", bound="Notification")
 
 
 class ProtocolModel(BaseModel):
@@ -30,7 +31,7 @@ class Request(ProtocolModel):
     progress_token: ProgressToken | None = None
 
     @classmethod
-    def from_protocol(cls: type[T], data: dict[str, Any]) -> T:
+    def from_protocol(cls: type[T_Request], data: dict[str, Any]) -> T_Request:
         """Convert from protocol-level representation."""
         if cls.expected_method:
             actual_method = data.get("method")
@@ -84,25 +85,60 @@ class Request(ProtocolModel):
 
 
 class Notification(ProtocolModel):
+    expected_method: ClassVar[str] = ""
     method: str
+    metadata: dict[str, Any] | None = Field(default=None)
 
     @classmethod
-    def from_protocol(cls, data: dict[str, Any]) -> "Notification":
+    def from_protocol(
+        cls: type[T_Notification], data: dict[str, Any]
+    ) -> T_Notification:
         """Convert from protocol-level representation"""
-        return cls(method=data["method"])
+        # Validate method if this is a concrete subclass
+        if cls.expected_method:
+            actual_method = data.get("method")
+            if actual_method != cls.expected_method:
+                raise ValueError(
+                    f"Can't create {cls.__name__} from '{actual_method}' method"
+                )
+
+        # Extract params
+        params = data.get("params", {})
+        meta = params.get("_meta")
+
+        # Build kwargs for the constructor
+        kwargs = {
+            "method": data["method"],
+        }
+        if meta:
+            kwargs["metadata"] = meta
+
+        # Add subclass-specific fields, respecting aliases
+        for field_name, field_info in cls.model_fields.items():
+            if field_name == "method":
+                continue
+
+            # Use the alias if it exists, otherwise use the field name
+            param_key = field_info.alias if field_info.alias else field_name
+
+            if param_key in params:
+                kwargs[field_name] = params[param_key]
+
+        return cls(**kwargs)
 
     def to_protocol(self) -> dict[str, Any]:
-        """Convert to protocol-level representation
-
-        Method and params are siblings in the spec.
-        """
+        """Convert to protocol-level representation"""
         params = self.model_dump(
-            exclude={"method"},
+            exclude={"method", "metadata"},
             by_alias=True,
             exclude_none=True,
         )
 
         result: dict[str, Any] = {"method": self.method}
+
+        if self.metadata:
+            params["_meta"] = self.metadata
+
         if params:
             result["params"] = params
         return result
@@ -260,51 +296,19 @@ class Ping(Request):
 
 
 class CancelledNotification(Notification):
+    expected_method: ClassVar[str] = "notifications/cancelled"
     method: str = Field(default="notifications/cancelled", frozen=True)
     request_id: RequestId = Field(alias="requestId")
     reason: str | None = None
 
-    @classmethod
-    def from_protocol(cls, data: dict[str, Any]) -> "CancelledNotification":
-        method = data["method"]
-        params = data["params"]
-        if method != "notifications/cancelled":
-            raise ValueError(
-                f"Can't create CancelledNotification from '{method}' method"
-            )
-        return cls.model_validate(
-            {
-                "method": method,
-                "request_id": params["requestId"],
-                "reason": params.get("reason"),
-            }
-        )
-
 
 class ProgressNotification(Notification):
+    expected_method: ClassVar[str] = "notifications/progress"
     method: str = Field(default="notifications/progress", frozen=True)
     progress_token: ProgressToken = Field(alias="progressToken")
     progress: float | int
     total: float | int
     message: str | None = None
-
-    @classmethod
-    def from_protocol(cls, data: dict[str, Any]) -> "ProgressNotification":
-        params = data["params"]
-        method = data["method"]
-        if method != "notifications/progress":
-            raise ValueError(
-                f"Can't create ProgressNotification from '{method}' method"
-            )
-        return cls.model_validate(
-            {
-                "method": data["method"],
-                "progress_token": params["progressToken"],
-                "progress": params["progress"],
-                "total": params["total"],
-                "message": params.get("message"),
-            }
-        )
 
 
 # --------- Tool Specific ----------
