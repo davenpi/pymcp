@@ -378,7 +378,7 @@ class Resource(ProtocolModel):
     )  # protocol calls this size
 
     def to_protocol(self) -> dict[str, Any]:
-        return self.model_dump(exclude_none=True, by_alias=True)
+        return self.model_dump(exclude_none=True, by_alias=True, mode="json")
 
 
 class ListResourcesRequest(Request):
