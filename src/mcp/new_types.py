@@ -1,5 +1,5 @@
 import traceback
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, ClassVar, Literal, TypeVar
 
 from pydantic import (
     AnyUrl,
@@ -17,28 +17,53 @@ ProgressToken = str | int
 Cursor = str
 Role = Literal["user", "assistant"]
 
+T = TypeVar("T", bound="Request")
+
 
 class ProtocolModel(BaseModel):
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
 
 class Request(ProtocolModel):
+    expected_method: ClassVar[str] = ""
     method: str
     progress_token: ProgressToken | None = None
 
     @classmethod
-    def from_protocol(cls, data: dict[str, Any]) -> "Request":
-        """Convert from protocol-level representation.
+    def from_protocol(cls: type[T], data: dict[str, Any]) -> T:
+        """Convert from protocol-level representation."""
+        if cls.expected_method:
+            actual_method = data.get("method")
+            if actual_method != cls.expected_method:
+                raise ValueError(
+                    f"Can't create {cls.__name__} from '{actual_method}' method"
+                )
 
-        Ignores metadata aside from progress token.
-        """
+        # Extract protocol structure
         params = data.get("params", {})
         meta = params.get("_meta", {})
 
-        return cls(
-            method=data["method"],
-            progress_token=meta.get("progressToken"),
-        )
+        # Build kwargs for the constructor
+        kwargs = {
+            "method": data["method"],
+            "progress_token": meta.get("progressToken"),
+        }
+
+        # Add subclass-specific fields, respecting aliases
+        for field_name, field_info in cls.model_fields.items():
+            if field_name in {"method", "progress_token"}:
+                continue
+
+            # Use the alias if it exists, otherwise use the field name
+            param_key = field_info.alias if field_info.alias else field_name
+            print("params", params)
+            if param_key in params:
+                print("param_key", param_key)
+                kwargs[field_name] = params[
+                    param_key
+                ]  # Note: kwargs uses field_name, not alias
+
+        return cls(**kwargs)
 
     def to_protocol(self) -> dict[str, Any]:
         """Convert to protocol-level representation"""
@@ -186,29 +211,13 @@ class ServerCapabilities(ProtocolModel):
 
 
 class InitializeRequest(Request):
+    expected_method: ClassVar[str] = "initialize"
     method: str = Field(default="initialize", frozen=True)
     protocol_version: str = Field(
         default=PROTOCOL_VERSION, alias="protocolVersion", frozen=True
     )
     client_info: Implementation = Field(alias="clientInfo")
     capabilities: ClientCapabilities = Field(default_factory=ClientCapabilities)
-
-    @classmethod
-    def from_protocol(cls, data: dict[str, Any]) -> "InitializeRequest":
-        """Convert from protocol-level representation"""
-        params = data["params"]
-        method = data["method"]
-        if method != "initialize":
-            raise ValueError(f"Can't create InitializeRequest from '{method}' method")
-
-        return cls.model_validate(
-            {
-                "method": "initialize",
-                "protocol_version": params["protocolVersion"],
-                "client_info": params["clientInfo"],
-                "capabilities": params["capabilities"],
-            }
-        )
 
 
 class InitializedNotification(Notification):
@@ -246,14 +255,8 @@ class InitializeResult(Result):
 
 
 class Ping(Request):
+    expected_method: ClassVar[str] = "ping"
     method: str = Field(default="ping", frozen=True)
-
-    @classmethod
-    def from_protocol(cls, data: dict[str, Any]) -> "Ping":
-        method = data["method"]
-        if method != "ping":
-            raise ValueError(f"Can't create Ping from '{method}' request.")
-        return cls()
 
 
 class CancelledNotification(Notification):
@@ -314,24 +317,9 @@ class ListToolsRequest(Request):
     the server should return the next page of tools.
     """
 
+    expected_method: ClassVar[str] = "tools/list"
     method: str = Field(default="tools/list", frozen=True)
     cursor: Cursor | None = None
-
-    @classmethod
-    def from_protocol(cls, data: dict[str, Any]) -> "ListToolsRequest":
-        """Convert from protocol-level representation"""
-        method = data["method"]
-        params = data.get("params", {})
-        meta = params.get("_meta", {})
-        if method != "tools/list":
-            raise ValueError(f"Can't create ListToolsRequest from '{method}' method")
-        return cls.model_validate(
-            {
-                "method": method,
-                "progress_token": meta.get("progressToken"),
-                "cursor": params.get("cursor"),
-            }
-        )
 
 
 # --------- Resource Specific ---------
@@ -382,19 +370,9 @@ class Resource(ProtocolModel):
 
 
 class ListResourcesRequest(Request):
+    expected_method: ClassVar[str] = "resources/list"
     method: str = Field("resources/list", frozen=True)
     cursor: Cursor | None = None
-
-    @classmethod
-    def from_protocol(cls, data: dict[str, Any]) -> "ListResourcesRequest":
-        method = data["method"]
-        params = data.get("params", {})
-        cursor = params.get("cursor", None)
-        if method != "resources/list":
-            raise ValueError(
-                f"Can't create ListResourcesRequest from '{method}' method"
-            )
-        return cls.model_validate({"method": method, "cursor": cursor})
 
 
 # class ListResourcesResult(Result):

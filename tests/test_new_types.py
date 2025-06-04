@@ -229,8 +229,16 @@ class TestInitialization:
     All initialization-related types together
     """
 
-    def test_initialize_request(self):
-        pass
+    def test_initialize_request_roundtrip(self):
+        request = InitializeRequest(
+            clientInfo=Implementation(name="Test client", version="1"),
+            capabilities=ClientCapabilities(),
+            protocol_version=PROTOCOL_VERSION,
+        )
+        protocol_data = request.to_protocol()
+        reconstructed = InitializeRequest.from_protocol(protocol_data)
+        assert reconstructed == request
+        assert reconstructed.client_info.name == "Test client"
 
     def test_initialized_notification(self):
         pass
