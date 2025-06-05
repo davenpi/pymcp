@@ -9,8 +9,8 @@ from mcp.new_types import (
     Annotations,
     ListResourcesRequest,
     ListResourcesResult,
-    ListResourceTemplateRequest,
-    ListResourceTemplateResult,
+    ListResourceTemplatesRequest,
+    ListResourceTemplatesResult,
     ReadResourceRequest,
     ReadResourceResult,
     Resource,
@@ -162,7 +162,7 @@ class TestResources:
 
     def test_list_resource_template_request_method_matches_spec(self):
         spec_method_name = "resources/templates/list"
-        request = ListResourceTemplateRequest()
+        request = ListResourceTemplatesRequest()
         assert request.method == spec_method_name
 
     def test_list_resource_template_result_roundtrips(self):
@@ -170,11 +170,11 @@ class TestResources:
             name="Test",
             uri_template="https://example.com/{resource_id}",
         )
-        result = ListResourceTemplateResult(
+        result = ListResourceTemplatesResult(
             resource_templates=[resource_template],
         )
         protocol_data = result.to_protocol()
-        from_protocol = ListResourceTemplateResult.from_protocol(protocol_data)
+        from_protocol = ListResourceTemplatesResult.from_protocol(protocol_data)
         assert from_protocol == result
 
     def test_read_resource_request_method_matches_spec(self):

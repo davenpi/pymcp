@@ -604,7 +604,7 @@ class ListToolsRequest(Request):
 
 class Resource(ProtocolModel):
     """
-    A known resource that the server can read from.
+    A known resource the server can read from.
     """
 
     uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
@@ -614,12 +614,13 @@ class Resource(ProtocolModel):
 
     name: str
     """
-    Human-readable resource name.
+    Human-readable resource name. Client can display this to the user.
     """
 
     description: str | None = None
     """
-    Optional resource description.
+    Optional resource description. Clients can use this to improve LLM understanding
+    of the resource.
     """
 
     mime_type: str | None = Field(default=None, alias="mimeType")
@@ -629,12 +630,13 @@ class Resource(ProtocolModel):
 
     annotations: Annotations | None = None
     """
-    Display hints for client rendering.
+    Display hints for client use and rendering.
     """
 
     size_in_bytes: int | None = Field(default=None, alias="size")
     """
-    Resource size in bytes.
+    Resource size in bytes. Used by Hosts to display file size and estimate token
+    usage.
     """
 
     # TODO: Maybe don't need to_protocol? It gets serialzed inside Result.to_protocol.
@@ -658,25 +660,25 @@ class TextResourceContents(ResourceContents):
 
     text: str
     """
-    The text of the item. Only set if the item can be represented as text (not binary
-    text).
+    The text of the resource. Only set if the resource can be represented as text
+    (not binary text).
     """
 
 
 class BlobResourceContents(ResourceContents):
     """
-    Binary resource contents.
+    Resource contents represented as a binary blob.
     """
 
     blob: str
     """
-    Base64-encoded string representting the binary data of the item.
+    Base64-encoded string representing the binary data of the resource.
     """
 
 
 class ResourceTemplate(ProtocolModel):
     """
-    A template for a resource that the server can read from.
+    A template for a set of resources that the server can read from.
     """
 
     uri_template: str = Field(alias="uriTemplate")
@@ -688,12 +690,14 @@ class ResourceTemplate(ProtocolModel):
 
     name: str
     """
-    Human-readable name for the type of resource this template refers to.
+    Human-readable name for the type of resource this template refers to. Clients can
+    use this to populate UI elements.
     """
 
     description: str | None = None
     """
-    Human-readable description of what this template is for.
+    Human-readable description of what this template is for. Clients can use this to
+    improve LLM understanding of the available resources.
     """
 
     mime_type: str | None = Field(default=None, alias="mimeType")
@@ -704,7 +708,7 @@ class ResourceTemplate(ProtocolModel):
 
     annotations: Annotations | None = None
     """
-    Display hints for client rendering.
+    Display hints for client use and rendering.
     """
 
     def to_protocol(self) -> dict[str, Any]:
@@ -739,7 +743,7 @@ class ListResourcesResult(Result):
     """
 
 
-class ListResourceTemplateRequest(Request):
+class ListResourceTemplatesRequest(Request):
     """
     Request to list available resource templates with optional pagination.
     """
@@ -751,7 +755,7 @@ class ListResourceTemplateRequest(Request):
     """
 
 
-class ListResourceTemplateResult(Result):
+class ListResourceTemplatesResult(Result):
     """
     Response containing available resource templates and pagination info.
     """
@@ -769,7 +773,7 @@ class ListResourceTemplateResult(Result):
 
 class ReadResourceRequest(Request):
     """
-    Request to read a resource.
+    Request to read a resource at a given URI.
     """
 
     method: str = Field("resources/read", frozen=True)
