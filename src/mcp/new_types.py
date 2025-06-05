@@ -30,13 +30,26 @@ class Request(ProtocolModel):
     """
     Base class for MCP requests.
 
-    Note: If you set both `progress_token` and `metadata["progressToken"]`,
-    the `progress_token` field takes precedence.
+    All requests must specify a method. Use `progress_token` to receive
+    progress updates for long-running operations.
+
+    Note: `progress_token` overrides `metadata["progressToken"]` if both are set.
     """
 
     method: str
+    """
+    The request method name.
+    """
+
     progress_token: ProgressToken | None = None
+    """
+    Token (str or int) to identify this request for progress updates.
+    """
+
     metadata: dict[str, Any] | None = Field(default=None)
+    """
+    Additional request metadata.
+    """
 
     @field_validator("metadata", mode="before")
     @classmethod
@@ -116,8 +129,20 @@ class Request(ProtocolModel):
 
 
 class Notification(ProtocolModel):
+    """
+    Base class for MCP notifications.
+
+    Notifications are one-way messages that don't expect a response.
+    """
+
     method: str
+    """
+    The notification method name.
+    """
     metadata: dict[str, Any] | None = Field(default=None)
+    """
+    Additional notification metadata.
+    """
 
     @classmethod
     def from_protocol(
@@ -178,7 +203,17 @@ class Notification(ProtocolModel):
 
 
 class Result(ProtocolModel):
+    """
+    Base class for MCP results.
+
+    Results are responses to requests. Each request type has a corresponding result
+    type.
+    """
+
     metadata: dict[str, Any] | None = Field(default=None)
+    """
+    Additional result metadata.
+    """
 
     @classmethod
     def from_protocol(cls: type[T_Result], data: dict[str, Any]) -> T_Result:
@@ -231,15 +266,28 @@ INTERNAL_ERROR = -32603
 
 
 class Error(ProtocolModel):
-    """MCP Error type.
+    """
+    MCP error with automatic exception formatting.
 
-    The 'data' field accepts str, dict, Exception, or None.
-    Exceptions are automatically formatted for transmission.
+    Example:
+        Error(code=500, message="Server error", data=some_exception)
     """
 
     code: int
+    """
+    Error type code.
+    """
+
     message: str
+    """
+    Human readable error message.
+    """
+
     data: str | dict[str, Any] | None = None
+    """
+    Additional error details. Accepts strings, dicts, or Exceptions.
+    Exceptions are automatically converted to formatted tracebacks.
+    """
 
     @field_validator("data", mode="before")
     @classmethod
@@ -268,7 +316,7 @@ class Error(ProtocolModel):
 
 # --------- Priorities ---------
 class Priority(ProtocolModel):
-    """Priority between 0 (not important) and 1 (very important)"""
+    """Priority level from 0 (lowest) to 1 (highest)."""
 
     value: float = Field(ge=0, le=1)
 
@@ -277,52 +325,125 @@ class Priority(ProtocolModel):
 
 
 class RootsCapability(ProtocolModel):
+    """
+    Capability for listing and monitoring filesystem roots.
+    """
+
     list_changed: bool | None = Field(default=None, alias="listChanged")
+    """
+    Whether the client sends notifications when roots change.
+    """
 
 
 class Implementation(ProtocolModel):
+    """Name and version string of the server or client."""
+
     name: str
     version: str
 
 
 class ClientCapabilities(ProtocolModel):
+    """
+    Capabilities that the client supports. Sent during initialization.
+    """
+
     experimental: dict[str, Any] | None = None
+    """
+    Experimental or non-standard capabilities.
+    """
+
     roots: RootsCapability | None = None
+    """
+    Filesystem roots listing and monitoring.
+    """
+
     sampling: dict[str, Any] | None = None
+    """
+    LLM sampling support from the host.
+    """
 
 
 class PromptsCapability(ProtocolModel):
+    """Capabilities for prompt management and notifications."""
+
     list_changed: bool | None = Field(default=None, alias="listChanged")
+    """
+    Whether the server sends notifications when prompts change.
+    """
 
 
 class ResourcesCapability(ProtocolModel):
+    """Capabilities for resource access and change monitoring."""
+
     subscribe: bool | None = None
+    """
+   Whether clients can subscribe to resource change updates.
+   """
+
     list_changed: bool | None = Field(default=None, alias="listChanged")
+    """
+   Whether the server sends notifications when resources change.
+   """
 
 
 class ToolsCapability(ProtocolModel):
+    """Capabilities for tool execution and change notifications."""
+
     list_changed: bool | None = Field(default=None, alias="listChanged")
+    """
+    Whether the server sends notifications when tools change.
+    """
 
 
 class ServerCapabilities(ProtocolModel):
+    """Capabilities that the server supports, sent during initialization."""
+
     experimental: dict[str, Any] | None = None
+    """
+    Experimental or non-standard capabilities.
+    """
     logging: dict[str, Any] | None = None
+    """
+    Loggin capability configuration.
+    """
     completions: dict[str, Any] | None = None
+    """
+    Completion capabilities.
+    """
     prompts: PromptsCapability | None = None
+    """
+    Prompt management capabilities.
+    """
     resources: ResourcesCapability | None = None
+    """
+    Resource access capabilities.
+    """
     tools: ToolsCapability | None = None
+    """
+    Tool execution capabilities.
+    """
 
 
 # --------- Initialization Types ----------
 
 
 class InitializeRequest(Request):
+    """
+    Initial handshake request to establish MCP connection.
+
+    Sent by the client to negotiate protocol version and exchange capability
+    information.
+    """
+
     method: str = Field(default="initialize", frozen=True)
     protocol_version: str = Field(
         default=PROTOCOL_VERSION, alias="protocolVersion", frozen=True
     )
     client_info: Implementation = Field(alias="clientInfo")
+    """Information about the client software."""
+
     capabilities: ClientCapabilities = Field(default_factory=ClientCapabilities)
+    """Capabilities the client supports."""
 
 
 class InitializedNotification(Notification):
@@ -433,13 +554,6 @@ class ListResourcesResult(Result):
     resources: list[Resource]
     next_cursor: Cursor | None = Field(default=None, alias="nextCursor")
 
-
-# class ListResourcesResult(Result):
-#     resources: list[Resources]
-
-#     @classmethod
-#     def from_protocol(cls, data: dict[str, Any]) -> "ListResourcesResult":
-#         pass cls()
 
 # --------- JSON-RPC Types ----------
 

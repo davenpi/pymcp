@@ -6,7 +6,6 @@ from mcp.new_types import ListToolsRequest, ProgressNotification
 
 
 class TestTools:
-
     def test_call_tool_with_arguments(self):
         # Test the complex case with nested data
         pass
