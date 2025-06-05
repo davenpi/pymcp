@@ -9,7 +9,10 @@ from mcp.new_types import (
     Annotations,
     ListResourcesRequest,
     ListResourcesResult,
+    ListResourceTemplateRequest,
+    ListResourceTemplateResult,
     Resource,
+    ResourceTemplate,
 )
 
 
@@ -141,3 +144,30 @@ class TestResources:
         for input_uri, expected_uri in test_cases:
             resource = Resource(uri=input_uri, name="Test")
             assert str(resource.uri) == expected_uri
+
+    def test_resource_template_serializes_with_uri_template(self):
+        resource_template = ResourceTemplate(
+            name="Test",
+            uri_template="https://example.com/{resource_id}",
+        )
+        assert resource_template.to_protocol() == {
+            "name": "Test",
+            "uriTemplate": "https://example.com/{resource_id}",
+        }
+
+    def test_list_resource_template_request_method_matches_spec(self):
+        spec_method_name = "resources/templates/list"
+        request = ListResourceTemplateRequest()
+        assert request.method == spec_method_name
+
+    def test_list_resource_template_result_roundtrips(self):
+        resource_template = ResourceTemplate(
+            name="Test",
+            uri_template="https://example.com/{resource_id}",
+        )
+        result = ListResourceTemplateResult(
+            resource_templates=[resource_template],
+        )
+        protocol_data = result.to_protocol()
+        from_protocol = ListResourceTemplateResult.from_protocol(protocol_data)
+        assert from_protocol == result

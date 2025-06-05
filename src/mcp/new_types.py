@@ -602,21 +602,6 @@ class Annotations(ProtocolModel):
         return self.model_dump(exclude_none=True, mode="json")
 
 
-# class Resource(ProtocolModel):
-#     """
-#     A know resource the server can read from.
-#     """
-
-#     uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
-#     name: str
-#     description: str | None = None
-#     mime_type: str | None = Field(default=None, alias="mimeType")
-#     annotations: Annotations | None = None
-#     size_in_bytes: int | None = Field(
-#         default=None, alias="size"
-#     )  # protocol calls this size
-
-
 class Resource(ProtocolModel):
     """
     A known resource that the server can read from.
@@ -656,6 +641,43 @@ class Resource(ProtocolModel):
         return self.model_dump(exclude_none=True, by_alias=True, mode="json")
 
 
+class ResourceTemplate(ProtocolModel):
+    """
+    A template for a resource that the server can read from.
+    """
+
+    uri_template: str = Field(alias="uriTemplate")
+    """
+    URI template following RFC 6570 specification (e.g., "file:///logs/{date}.log").
+    Template variables are enclosed in braces and will be expanded when requesting
+    the actual resource.
+    """
+
+    name: str
+    """
+    Human-readable name for the type of resource this template refers to.
+    """
+
+    description: str | None = None
+    """
+    Human-readable description of what this template is for.
+    """
+
+    mime_type: str | None = Field(default=None, alias="mimeType")
+    """
+    MIME type of the resource content. Only include if all resources matching this
+    template have the same type.
+    """
+
+    annotations: Annotations | None = None
+    """
+    Display hints for client rendering.
+    """
+
+    def to_protocol(self) -> dict[str, Any]:
+        return self.model_dump(exclude_none=True, by_alias=True, mode="json")
+
+
 class ListResourcesRequest(Request):
     """
     Request to list available resources with optional pagination.
@@ -676,6 +698,34 @@ class ListResourcesResult(Result):
     resources: list[Resource]
     """
     List of available resources.
+    """
+
+    next_cursor: Cursor | None = Field(default=None, alias="nextCursor")
+    """
+    Token for retrieving the next page, if more results exist.
+    """
+
+
+class ListResourceTemplateRequest(Request):
+    """
+    Request to list available resource templates with optional pagination.
+    """
+
+    method: str = Field("resources/templates/list", frozen=True)
+    cursor: Cursor | None = None
+    """
+    Pagination token for retrieving the next page of results.
+    """
+
+
+class ListResourceTemplateResult(Result):
+    """
+    Response containing available resource templates and pagination info.
+    """
+
+    resource_templates: list[ResourceTemplate] = Field(alias="resourceTemplates")
+    """
+    List of available resource templates.
     """
 
     next_cursor: Cursor | None = Field(default=None, alias="nextCursor")
