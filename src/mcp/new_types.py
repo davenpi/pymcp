@@ -17,9 +17,9 @@ ProgressToken = str | int
 Cursor = str
 Role = Literal["user", "assistant"]
 
-T_Request = TypeVar("T_Request", bound="Request")
-T_Notification = TypeVar("T_Notification", bound="Notification")
-T_Result = TypeVar("T_Result", bound="Result")
+RequestT = TypeVar("RequestT", bound="Request")
+NotificationT = TypeVar("NotificationT", bound="Notification")
+ResultT = TypeVar("ResultT", bound="Result")
 
 
 class ProtocolModel(BaseModel):
@@ -65,7 +65,7 @@ class Request(ProtocolModel):
         return metadata
 
     @classmethod
-    def from_protocol(cls: type[T_Request], data: dict[str, Any]) -> T_Request:
+    def from_protocol(cls: type[RequestT], data: dict[str, Any]) -> RequestT:
         """Convert from protocol-level representation."""
         method_field = cls.model_fields.get("method")
         if method_field and isinstance(method_field.default, str):
@@ -145,9 +145,7 @@ class Notification(ProtocolModel):
     """
 
     @classmethod
-    def from_protocol(
-        cls: type[T_Notification], data: dict[str, Any]
-    ) -> T_Notification:
+    def from_protocol(cls: type[NotificationT], data: dict[str, Any]) -> NotificationT:
         """Convert from protocol-level representation"""
         # Validate method if this is a concrete subclass
         method_field = cls.model_fields.get("method")
@@ -216,7 +214,7 @@ class Result(ProtocolModel):
     """
 
     @classmethod
-    def from_protocol(cls: type[T_Result], data: dict[str, Any]) -> T_Result:
+    def from_protocol(cls: type[ResultT], data: dict[str, Any]) -> ResultT:
         """Convert from protocol-level representation."""
 
         # Extract metadata
@@ -848,6 +846,8 @@ class PromptArgument(ProtocolModel):
 class Prompt(ProtocolModel):
     """
     A prompt or prompt template the server offers.
+
+    Note the prompt content is in PromptMessage objects.
     """
 
     name: str
@@ -953,6 +953,10 @@ class GetPromptRequest(Request):
 class GetPromptResult(Result):
     description: str | None = None
     messages: list[PromptMessage]
+
+
+class PromptListChangedNotification(Notification):
+    method: str = Field("notifications/prompts/list_changed", frozen=True)
 
 
 # --------- JSON-RPC Types ----------
