@@ -653,7 +653,7 @@ class ResourceContents(ProtocolModel):
 
 class TextResourceContents(ResourceContents):
     """
-    Text resource contents.
+    Resource contents represented as text (not binary text).
     """
 
     text: str
@@ -874,24 +874,39 @@ class TextContent(ProtocolModel):
 
 
 class ImageContent(ProtocolModel):
-    """An image provided to or from an LLM."""
+    """
+    An image provided to or from an LLM.
 
+    Image is provided as base64-encoded data.
+    """
+
+    type: str = Field("image", frozen=True)
+    mime_type: str = Field(alias="mimeType")
     data: str
     """
     The base64-encoded image data.
     """
-    mime_type: str = Field(alias="mimeType")
+
     annotations: Annotations | None = None
+    """
+    Display hints for client use and rendering.
+    """
 
 
 class AudioContent(ProtocolModel):
+    """
+    Audio provided to or from an LLM.
+
+    Audio is provided as base64-encoded data.
+    """
+
     type: str = Field("audio", frozen=True)
+    mime_type: str = Field(alias="mimeType")
     data: str
     """
     The base64-encoded audio data
     """
 
-    mime_type: str = Field(alias="mimeType")
     annotations: Annotations | None = None
     """
     Display hints for client use and rendering.
@@ -899,19 +914,33 @@ class AudioContent(ProtocolModel):
 
 
 class EmbeddedResource(ProtocolModel):
+    """
+    The contents of a resource that is embedded in a prompt or tool call result.
+
+    Client determines how to display the resource for the benefit of the LLM and/or
+    user.
+    """
+
     type: str = Field("resource", frozen=True)
     resource: TextResourceContents | BlobResourceContents
     annotations: Annotations
+    """
+    Display hints for client use and rendering.
+    """
 
 
 class PromptMessage(ProtocolModel):
+    """
+    Describes a message as a part of a prompt.
+    """
+
     role: Role
     content: TextContent | ImageContent | AudioContent | EmbeddedResource
 
 
 class ListPromptsRequest(Request):
     """
-    Request to list available prompts.
+    Sent by client to list available prompts and prompt templates on the server.
     """
 
     method: str = Field("prompts/list", frozen=True)
@@ -938,6 +967,13 @@ class ListPromptsResult(Result):
 
 
 class GetPromptRequest(Request):
+    """
+    Sent by client to get a specific prompt or prompt template from the server.
+
+    If the prompt is a template, the server will return a prompt with the arguments
+    filled in.
+    """
+
     method: str = Field("prompts/get", frozen=True)
     name: str
     """
@@ -951,8 +987,19 @@ class GetPromptRequest(Request):
 
 
 class GetPromptResult(Result):
+    """
+    Response containing the prompt or prompt template.
+    """
+
     description: str | None = None
+    """
+    Human-readable description of the prompt or prompt template.
+    """
+
     messages: list[PromptMessage]
+    """
+    The prompt or prompt template messages.
+    """
 
 
 class PromptListChangedNotification(Notification):
