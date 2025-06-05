@@ -377,13 +377,13 @@ class ResourcesCapability(ProtocolModel):
 
     subscribe: bool | None = None
     """
-   Whether clients can subscribe to resource change updates.
-   """
+    Whether clients can subscribe to resource change updates.
+    """
 
     list_changed: bool | None = Field(default=None, alias="listChanged")
     """
-   Whether the server sends notifications when resources change.
-   """
+    Whether the server sends notifications when resources change.
+    """
 
 
 class ToolsCapability(ProtocolModel):
@@ -440,56 +440,127 @@ class InitializeRequest(Request):
         default=PROTOCOL_VERSION, alias="protocolVersion", frozen=True
     )
     client_info: Implementation = Field(alias="clientInfo")
-    """Information about the client software."""
+    """
+    Information about the client software.
+    """
 
     capabilities: ClientCapabilities = Field(default_factory=ClientCapabilities)
-    """Capabilities the client supports."""
+    """
+    Capabilities the client supports.
+    """
 
 
 class InitializedNotification(Notification):
+    """
+    Confirms successful MCP connection initialization.
+
+    Sent by the client after processing the server's InitializeResult.
+    """
+
     method: str = Field(default="notifications/initialized", frozen=True)
 
 
 class InitializeResult(Result):
+    """
+    Server's response to initialization, completing the MCP handshake.
+
+    Contains server capabilities and optional setup instructions for the client.
+    """
+
     protocol_version: str = Field(default=PROTOCOL_VERSION, alias="protocolVersion")
     capabilities: ServerCapabilities
+    """
+    Capabilities the server supports.
+    """
+
     server_info: Implementation = Field(alias="serverInfo")
+    """
+    Information about the server software.
+    """
+
     instructions: str | None = None
+    """
+    Optional setup or usage instructions for the client.
+    """
 
 
 # --------- One-off types ----------
 
 
 class Ping(Request):
+    """
+    Heartbeat to check connection health. Sent by client or server.
+
+    Must be answered promptly to maintain connection.
+    """
+
     method: str = Field(default="ping", frozen=True)
 
 
 class CancelledNotification(Notification):
+    """
+    Notifies that a request was cancelled.
+
+    Sent when a request is terminated before execution or completion.
+    """
+
     method: str = Field(default="notifications/cancelled", frozen=True)
     request_id: RequestId = Field(alias="requestId")
+    """
+    ID of the cancelled request.
+    """
+
     reason: str | None = None
+    """
+    Optional explanation for the cancellation.
+    """
 
 
 class ProgressNotification(Notification):
+    """
+    Reports progress on a long-running operation. Typically sent by servers.
+
+    Links to a request via its progress_token.
+    """
+
     method: str = Field(default="notifications/progress", frozen=True)
     progress_token: ProgressToken = Field(alias="progressToken")
+    """
+    Token identifying the operation being tracked.
+    """
+
     progress: float | int
+    """
+    Current progress amount.
+    """
+
     total: float | int
+    """
+    Total expected amount when complete.
+    """
+
     message: str | None = None
+    """
+    Optional progress description or status message.
+    """
 
 
 # --------- Tool Specific ----------
 
 
 class ListToolsRequest(Request):
-    """List tools request.
+    """
+    Request to list available tools with optional pagination.
 
-    Cursor is opaque. No direct relation to the server's state. If it's provided,
-    the server should return the next page of tools.
+    Use cursor for pagination - it's an opaque token with no direct relation to server
+    state.
     """
 
     method: str = Field(default="tools/list", frozen=True)
     cursor: Cursor | None = None
+    """
+    Opaque pagination token for retrieving the next page of results.
+    """
 
 
 # --------- Resource Specific ---------
