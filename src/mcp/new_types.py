@@ -491,7 +491,7 @@ class Annotations(ProtocolModel):
     """
     Display hints for client rendering.
 
-    Guides how clients should use or present objects to users.
+    Guides how clients should use or present objects.
     """
 
     audience: list[Role] | Role | None = None
@@ -823,6 +823,136 @@ class ResourceUpdatedNotification(Notification):
 
     method: str = Field("notifications/resources/updated", frozen=True)
     uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
+
+
+# --------- Prompt Specific ----------
+
+
+class PromptArgument(ProtocolModel):
+    """
+    Describes an argument that a prompt can accept.
+    """
+
+    name: str
+    description: str | None = None
+    """
+    Human-readable description of the argument.
+    """
+
+    required: bool = Field(default=False)
+    """
+    Whether the argument must be provided. Defaults to False.
+    """
+
+
+class Prompt(ProtocolModel):
+    """
+    A prompt or prompt template the server offers.
+    """
+
+    name: str
+    description: str | None = None
+    arguments: list[PromptArgument] | None = None
+    """
+    List of arguments used for templating the prompt.
+    """
+
+
+class TextContent(ProtocolModel):
+    """Text provided to or from an LLM."""
+
+    type: str = Field("text", frozen=True)
+    text: str
+    """
+    The text content of the message.
+    """
+
+    annotations: Annotations | None = None
+    """
+    Display hints for client use and rendering.
+    """
+
+
+class ImageContent(ProtocolModel):
+    """An image provided to or from an LLM."""
+
+    data: str
+    """
+    The base64-encoded image data.
+    """
+    mime_type: str = Field(alias="mimeType")
+    annotations: Annotations | None = None
+
+
+class AudioContent(ProtocolModel):
+    type: str = Field("audio", frozen=True)
+    data: str
+    """
+    The base64-encoded audio data
+    """
+
+    mime_type: str = Field(alias="mimeType")
+    annotations: Annotations | None = None
+    """
+    Display hints for client use and rendering.
+    """
+
+
+class EmbeddedResource(ProtocolModel):
+    type: str = Field("resource", frozen=True)
+    resource: TextResourceContents | BlobResourceContents
+    annotations: Annotations
+
+
+class PromptMessage(ProtocolModel):
+    role: Role
+    content: TextContent | ImageContent | AudioContent | EmbeddedResource
+
+
+class ListPromptsRequest(Request):
+    """
+    Request to list available prompts.
+    """
+
+    method: str = Field("prompts/list", frozen=True)
+    cursor: Cursor | None = None
+    """
+    Pagination token for retrieving the next page of results.
+    """
+
+
+class ListPromptsResult(Result):
+    """
+    Response containing available prompts and pagination info.
+    """
+
+    prompts: list[Prompt]
+    """
+    List of available prompts.
+    """
+
+    next_cursor: Cursor | None = Field(default=None, alias="nextCursor")
+    """
+    Token for retrieving the next page, if more results exist.
+    """
+
+
+class GetPromptRequest(Request):
+    method: str = Field("prompts/get", frozen=True)
+    name: str
+    """
+    The name of the prompt or prompt template.
+    """
+
+    arguments: dict[str, str] | None = None
+    """
+    Arguments to use for templating the prompt.
+    """
+
+
+class GetPromptResult(Result):
+    description: str | None = None
+    messages: list[PromptMessage]
 
 
 # --------- JSON-RPC Types ----------
