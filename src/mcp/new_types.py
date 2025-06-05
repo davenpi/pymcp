@@ -567,15 +567,28 @@ class ListToolsRequest(Request):
 
 
 class Annotations(ProtocolModel):
-    """Annotations for client. Client can use to decide how objects are displayed.
+    """
+    Display hints for client rendering.
 
-    Attributes:
-        audience: List of roles, either "user" or "assistant".
-        priority: Priority value between 0 (lowest) and 1 (highest), or None.
+    Guides how clients should use or present objects to users.
     """
 
-    audience: list[Role] | None = None
+    audience: list[Role] | Role | None = None
+    """
+    Target audience roles. Single role or list of roles.
+    """
+
     priority: float | None = None
+    """
+    Priority level from 0 (lowest) to 1 (highest).
+    """
+
+    @field_validator("audience", mode="before")
+    @classmethod
+    def validate_audience(cls, v: str | list[str] | Role | list[Role]):
+        if isinstance(v, str):
+            return [v]
+        return v
 
     @field_validator("priority")
     @classmethod
@@ -584,55 +597,113 @@ class Annotations(ProtocolModel):
             raise ValueError("priority must be between 0 and 1")
         return v
 
-    @field_validator("audience", mode="before")
-    @classmethod
-    def validate_audience(cls, v: str | list[str]):
-        if isinstance(v, str):
-            return [v]
-        return v
-
     def to_protocol(self) -> dict[str, Any]:
         """Model dump to dict. Note 'audience' gets serialized to a list!"""
         return self.model_dump(exclude_none=True, mode="json")
 
 
+# class Resource(ProtocolModel):
+#     """
+#     A know resource the server can read from.
+#     """
+
+#     uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
+#     name: str
+#     description: str | None = None
+#     mime_type: str | None = Field(default=None, alias="mimeType")
+#     annotations: Annotations | None = None
+#     size_in_bytes: int | None = Field(
+#         default=None, alias="size"
+#     )  # protocol calls this size
+
+
 class Resource(ProtocolModel):
     """
-    A know resource the server can read from.
+    A known resource that the server can read from.
     """
 
     uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
+    """
+    Resource identifier (file path, URL, etc.).
+    """
+
     name: str
+    """
+    Human-readable resource name.
+    """
+
     description: str | None = None
+    """
+    Optional resource description.
+    """
+
     mime_type: str | None = Field(default=None, alias="mimeType")
+    """
+    MIME type of the resource content.
+    """
+
     annotations: Annotations | None = None
-    size_in_bytes: int | None = Field(
-        default=None, alias="size"
-    )  # protocol calls this size
+    """
+    Display hints for client rendering.
+    """
+
+    size_in_bytes: int | None = Field(default=None, alias="size")
+    """
+    Resource size in bytes.
+    """
 
     def to_protocol(self) -> dict[str, Any]:
         return self.model_dump(exclude_none=True, by_alias=True, mode="json")
 
 
 class ListResourcesRequest(Request):
+    """
+    Request to list available resources with optional pagination.
+    """
+
     method: str = Field("resources/list", frozen=True)
     cursor: Cursor | None = None
+    """
+    Pagination token for retrieving the next page of results.
+    """
 
 
-# TODO: How can we get autocompletions in snake_case??
-# TODO: FIX. We're serializing to AnyUrl. No good.
 class ListResourcesResult(Result):
+    """
+    Response containing available resources and pagination info.
+    """
+
     resources: list[Resource]
+    """
+    List of available resources.
+    """
+
     next_cursor: Cursor | None = Field(default=None, alias="nextCursor")
+    """
+    Token for retrieving the next page, if more results exist.
+    """
 
 
 # --------- JSON-RPC Types ----------
 
 
 class JSONRPCRequest(ProtocolModel):
+    """
+    JSON-RPC 2.0 request wrapper for MCP requests.
+
+    Wire format for requests that expect responses.
+    """
+
     jsonrpc: str = Field(default=JSONRPC_VERSION, frozen=True)
     id: RequestId
+    """
+    Unique identifier for matching requests to responses.
+    """
+
     request: Request
+    """
+    The MCP request payload.
+    """
 
     @classmethod
     def from_request(cls, request: Request, id: RequestId) -> "JSONRPCRequest":
@@ -644,7 +715,7 @@ class JSONRPCRequest(ProtocolModel):
         return self.request
 
     def to_wire(self) -> dict[str, Any]:
-        """Convert to wire format (spec-compliant JSON-RPC)"""
+        """Convert to wire format (spec-compliant JSON-RPC 2.0)"""
         protocol_data = self.request.to_protocol()
         protocol_data["jsonrpc"] = self.jsonrpc
         protocol_data["id"] = self.id
@@ -652,8 +723,17 @@ class JSONRPCRequest(ProtocolModel):
 
 
 class JSONRPCNotification(ProtocolModel):
+    """
+    JSON-RPC 2.0 notification wrapper for MCP notifications.
+
+    Wire format for one-way messages that don't expect responses.
+    """
+
     jsonrpc: str = Field(default=JSONRPC_VERSION, frozen=True)
     notification: Notification
+    """
+    The actual MCP notification payload.
+    """
 
     @classmethod
     def from_notification(cls, notification: Notification) -> "JSONRPCNotification":
@@ -663,15 +743,29 @@ class JSONRPCNotification(ProtocolModel):
         return self.notification
 
     def to_wire(self) -> dict[str, Any]:
+        """Convert to wire format (spec-compliant JSON-RPC 2.0)"""
         protocol_data = self.notification.to_protocol()
         protocol_data["jsonrpc"] = self.jsonrpc
         return protocol_data
 
 
 class JSONRPCResponse(ProtocolModel):
+    """
+    JSON-RPC 2.0 response wrapper for successful MCP results.
+
+    Wire format for successful request responses.
+    """
+
     jsonrpc: str = Field(default=JSONRPC_VERSION, frozen=True)
     id: RequestId
+    """
+    Identifier matching the original request.
+    """
+
     result: Result
+    """
+    MCP result payload.
+    """
 
     @classmethod
     def from_result(cls, result: Result, id: RequestId) -> "JSONRPCResponse":
@@ -683,7 +777,7 @@ class JSONRPCResponse(ProtocolModel):
         return self.result
 
     def to_wire(self) -> dict[str, Any]:
-        """Convert to wire format (spec-compliant JSON-RPC)"""
+        """Convert to wire format (spec-compliant JSON-RPC 2.0)"""
         protocol_data: dict[str, Any] = {}
         protocol_data["result"] = self.result.to_protocol()
         protocol_data["jsonrpc"] = self.jsonrpc
@@ -692,9 +786,22 @@ class JSONRPCResponse(ProtocolModel):
 
 
 class JSONRPCError(ProtocolModel):
+    """
+    JSON-RPC 2.0 error wrapper for failed MCP requests.
+
+    Wire format for request error responses.
+    """
+
     jsonrpc: str = Field(default=JSONRPC_VERSION, frozen=True)
     id: RequestId
+    """
+    Identifier matching the original request.
+    """
+
     error: Error
+    """
+    MCP error payload.
+    """
 
     @classmethod
     def from_error(cls, error: Error, id: RequestId) -> "JSONRPCError":
@@ -706,7 +813,7 @@ class JSONRPCError(ProtocolModel):
         return self.error
 
     def to_wire(self) -> dict[str, Any]:
-        """Convert to wire format (spec-compliant JSON-RPC)"""
+        """Convert to wire format (spec-compliant JSON-RPC 2.0)"""
         protocol_data: dict[str, Any] = {}
         protocol_data["error"] = self.error.to_protocol()
         protocol_data["jsonrpc"] = self.jsonrpc
