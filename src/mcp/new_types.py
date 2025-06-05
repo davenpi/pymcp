@@ -128,6 +128,20 @@ class Request(ProtocolModel):
         return result
 
 
+class PaginatedRequest(Request):
+    """
+    Base class for MCP requests that support pagination.
+
+    Includes an opaque cursor representing the current pagination position.
+    If provided, the server should return results starting after this cursor.
+    """
+
+    cursor: Cursor | None = None
+    """
+    Opaque pagination token for retrieving the next page of results.
+    """
+
+
 class Notification(ProtocolModel):
     """
     Base class for MCP notifications.
@@ -254,6 +268,20 @@ class Result(ProtocolModel):
             result["_meta"] = self.metadata
 
         return result
+
+
+class PaginatedResult(Result):
+    """
+    Base class for MCP results that support pagination.
+
+    Includes an opaque token representing the pagination position after the last
+    returned result. If present, there may be more results available.
+    """
+
+    next_cursor: Cursor | None = Field(default=None, alias="nextCursor")
+    """
+    Token for retrieving the next page, if more results exist.
+    """
 
 
 PARSE_ERROR = -32700
@@ -582,7 +610,7 @@ class ProgressNotification(Notification):
 # --------- Tool Specific ----------
 
 
-class ListToolsRequest(Request):
+class ListToolsRequest(PaginatedRequest):
     """
     Request to list available tools with optional pagination.
 
@@ -591,10 +619,6 @@ class ListToolsRequest(Request):
     """
 
     method: str = Field(default="tools/list", frozen=True)
-    cursor: Cursor | None = None
-    """
-    Opaque pagination token for retrieving the next page of results.
-    """
 
 
 # --------- Resource Specific ---------
@@ -713,19 +737,15 @@ class ResourceTemplate(ProtocolModel):
         return self.model_dump(exclude_none=True, by_alias=True, mode="json")
 
 
-class ListResourcesRequest(Request):
+class ListResourcesRequest(PaginatedRequest):
     """
     Request to list available resources with optional pagination.
     """
 
     method: str = Field("resources/list", frozen=True)
-    cursor: Cursor | None = None
-    """
-    Pagination token for retrieving the next page of results.
-    """
 
 
-class ListResourcesResult(Result):
+class ListResourcesResult(PaginatedResult):
     """
     Response containing available resources and pagination info.
     """
@@ -735,25 +755,16 @@ class ListResourcesResult(Result):
     List of available resources.
     """
 
-    next_cursor: Cursor | None = Field(default=None, alias="nextCursor")
-    """
-    Token for retrieving the next page, if more results exist.
-    """
 
-
-class ListResourceTemplatesRequest(Request):
+class ListResourceTemplatesRequest(PaginatedRequest):
     """
     Request to list available resource templates with optional pagination.
     """
 
     method: str = Field("resources/templates/list", frozen=True)
-    cursor: Cursor | None = None
-    """
-    Pagination token for retrieving the next page of results.
-    """
 
 
-class ListResourceTemplatesResult(Result):
+class ListResourceTemplatesResult(PaginatedResult):
     """
     Response containing available resource templates and pagination info.
     """
@@ -761,11 +772,6 @@ class ListResourceTemplatesResult(Result):
     resource_templates: list[ResourceTemplate] = Field(alias="resourceTemplates")
     """
     List of available resource templates.
-    """
-
-    next_cursor: Cursor | None = Field(default=None, alias="nextCursor")
-    """
-    Token for retrieving the next page, if more results exist.
     """
 
 
@@ -938,19 +944,15 @@ class PromptMessage(ProtocolModel):
     content: TextContent | ImageContent | AudioContent | EmbeddedResource
 
 
-class ListPromptsRequest(Request):
+class ListPromptsRequest(PaginatedRequest):
     """
     Sent by client to list available prompts and prompt templates on the server.
     """
 
     method: str = Field("prompts/list", frozen=True)
-    cursor: Cursor | None = None
-    """
-    Pagination token for retrieving the next page of results.
-    """
 
 
-class ListPromptsResult(Result):
+class ListPromptsResult(PaginatedResult):
     """
     Response containing available prompts and pagination info.
     """
@@ -958,11 +960,6 @@ class ListPromptsResult(Result):
     prompts: list[Prompt]
     """
     List of available prompts.
-    """
-
-    next_cursor: Cursor | None = Field(default=None, alias="nextCursor")
-    """
-    Token for retrieving the next page, if more results exist.
     """
 
 
