@@ -610,15 +610,67 @@ class ProgressNotification(Notification):
 # --------- Tool Specific ----------
 
 
+class InputSchema(ProtocolModel):
+    """
+    JSON schema for the tool's input parameters.
+    """
+
+    type: str = Field("object", frozen=True)
+    properties: dict[str, Any] | None = None
+    required: list[str] | None = None
+
+
+class ToolAnnotations(ProtocolModel):
+    """
+    Additional properties describing a tool to the client.
+
+    All properties are *hints* and not guaranteed to be accurate. Clients should not
+    rely on these hints to determine the tool's behavior from untrusted servers.
+    """
+
+    title: str | None = None
+    """
+    Human-readable title of the tool.
+    """
+
+    read_only_hint: bool = Field(default=False, alias="readOnlyHint")
+    destructive_hint: bool = Field(default=True, alias="destructiveHint")
+    idempotent_hint: bool = Field(default=False, alias="idempotentHint")
+    open_world_hint: bool = Field(default=True, alias="openWorldHint")
+
+
+class Tool(ProtocolModel):
+    """
+    A tool that the server can execute.
+    """
+
+    name: str
+    description: str | None = None
+    """
+    Human-readable description of the tool. Clients can use this to improve LLM
+    understanding of the tool.
+    """
+    input_schema: InputSchema = Field(alias="inputSchema")
+    """
+    JSON schema for the tool's input parameters.
+    """
+    annotations: ToolAnnotations | None = Field(default=None)
+
+
 class ListToolsRequest(PaginatedRequest):
     """
     Request to list available tools with optional pagination.
-
-    Use cursor for pagination - it's an opaque token with no direct relation to server
-    state.
     """
 
     method: str = Field(default="tools/list", frozen=True)
+
+
+class ListToolsResult(PaginatedResult):
+    """
+    Response containing available tools and pagination info.
+    """
+
+    tools: list[Tool]
 
 
 # --------- Resource Specific ---------
