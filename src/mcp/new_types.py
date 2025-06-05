@@ -790,6 +790,37 @@ class ReadResourceResult(Result):
     """
 
 
+class ResourceListChangedNotification(Notification):
+    method: str = Field("notifications/resources/list_changed", frozen=True)
+
+
+class SubscribeRequest(Request):
+    """
+    Request to subscribe to resource update notifications for a given resource.
+    """
+
+    method: str = Field("resources/subscribe", frozen=True)
+    uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
+
+
+class UnsubscribeRequest(Request):
+    """
+    Request to unsubscribe from resource update notifications for a given resource.
+    """
+
+    method: str = Field("resources/unsubscribe", frozen=True)
+    uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
+
+
+class ResourceUpdatedNotification(Notification):
+    """
+    Notification that a resource has been updated.
+    """
+
+    method: str = Field("notifications/resources/updated", frozen=True)
+    uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
+
+
 # --------- JSON-RPC Types ----------
 
 

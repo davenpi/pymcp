@@ -15,7 +15,9 @@ from mcp.new_types import (
     ReadResourceResult,
     Resource,
     ResourceTemplate,
+    SubscribeRequest,
     TextResourceContents,
+    UnsubscribeRequest,
 )
 
 
@@ -189,3 +191,15 @@ class TestResources:
         protocol_data = result.to_protocol()
         from_protocol = ReadResourceResult.from_protocol(protocol_data)
         assert from_protocol == result
+
+    def test_subscribe_request_method_roundtrips(self):
+        request = SubscribeRequest(uri="https://example.com/")
+        protocol_data = request.to_protocol()
+        from_protocol = SubscribeRequest.from_protocol(protocol_data)
+        assert from_protocol == request
+
+    def test_unsubscribe_request_method_roundtrips(self):
+        request = UnsubscribeRequest(uri="https://example.com/")
+        protocol_data = request.to_protocol()
+        from_protocol = UnsubscribeRequest.from_protocol(protocol_data)
+        assert from_protocol == request
