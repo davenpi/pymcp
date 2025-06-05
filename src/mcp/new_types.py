@@ -484,7 +484,43 @@ class InitializeResult(Result):
     """
 
 
-# --------- One-off types ----------
+# --------- Cross-cutting types ----------
+
+
+class Annotations(ProtocolModel):
+    """
+    Display hints for client rendering.
+
+    Guides how clients should use or present objects to users.
+    """
+
+    audience: list[Role] | Role | None = None
+    """
+    Target audience roles. Single role or list of roles.
+    """
+
+    priority: float | None = None
+    """
+    Priority level from 0 (lowest) to 1 (highest).
+    """
+
+    @field_validator("audience", mode="before")
+    @classmethod
+    def validate_audience(cls, v: str | list[str] | Role | list[Role]):
+        if isinstance(v, str):
+            return [v]
+        return v
+
+    @field_validator("priority")
+    @classmethod
+    def validate_priority(cls, v: float | None):
+        if v is not None and not (0 <= v <= 1):
+            raise ValueError("priority must be between 0 and 1")
+        return v
+
+    def to_protocol(self) -> dict[str, Any]:
+        """Model dump to dict. Note 'audience' gets serialized to a list!"""
+        return self.model_dump(exclude_none=True, mode="json")
 
 
 class Ping(Request):
@@ -564,42 +600,6 @@ class ListToolsRequest(Request):
 
 
 # --------- Resource Specific ---------
-
-
-class Annotations(ProtocolModel):
-    """
-    Display hints for client rendering.
-
-    Guides how clients should use or present objects to users.
-    """
-
-    audience: list[Role] | Role | None = None
-    """
-    Target audience roles. Single role or list of roles.
-    """
-
-    priority: float | None = None
-    """
-    Priority level from 0 (lowest) to 1 (highest).
-    """
-
-    @field_validator("audience", mode="before")
-    @classmethod
-    def validate_audience(cls, v: str | list[str] | Role | list[Role]):
-        if isinstance(v, str):
-            return [v]
-        return v
-
-    @field_validator("priority")
-    @classmethod
-    def validate_priority(cls, v: float | None):
-        if v is not None and not (0 <= v <= 1):
-            raise ValueError("priority must be between 0 and 1")
-        return v
-
-    def to_protocol(self) -> dict[str, Any]:
-        """Model dump to dict. Note 'audience' gets serialized to a list!"""
-        return self.model_dump(exclude_none=True, mode="json")
 
 
 class Resource(ProtocolModel):
