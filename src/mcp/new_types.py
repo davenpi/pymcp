@@ -637,8 +637,41 @@ class Resource(ProtocolModel):
     Resource size in bytes.
     """
 
+    # TODO: Maybe don't need to_protocol? It gets serialzed inside Result.to_protocol.
     def to_protocol(self) -> dict[str, Any]:
         return self.model_dump(exclude_none=True, by_alias=True, mode="json")
+
+
+class ResourceContents(ProtocolModel):
+    """
+    Base class for resource contents.
+    """
+
+    uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
+    mime_type: str | None = Field(default=None, alias="mimeType")
+
+
+class TextResourceContents(ResourceContents):
+    """
+    Text resource contents.
+    """
+
+    text: str
+    """
+    The text of the item. Only set if the item can be represented as text (not binary
+    text).
+    """
+
+
+class BlobResourceContents(ResourceContents):
+    """
+    Binary resource contents.
+    """
+
+    blob: str
+    """
+    Base64-encoded string representting the binary data of the item.
+    """
 
 
 class ResourceTemplate(ProtocolModel):
@@ -731,6 +764,29 @@ class ListResourceTemplateResult(Result):
     next_cursor: Cursor | None = Field(default=None, alias="nextCursor")
     """
     Token for retrieving the next page, if more results exist.
+    """
+
+
+class ReadResourceRequest(Request):
+    """
+    Request to read a resource.
+    """
+
+    method: str = Field("resources/read", frozen=True)
+    uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
+    """
+    URI of the resource to read.
+    """
+
+
+class ReadResourceResult(Result):
+    """
+    Response containing the content of a resource.
+    """
+
+    contents: list[TextResourceContents | BlobResourceContents]
+    """
+    The content of the resource.
     """
 
 

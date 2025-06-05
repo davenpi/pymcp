@@ -11,8 +11,11 @@ from mcp.new_types import (
     ListResourcesResult,
     ListResourceTemplateRequest,
     ListResourceTemplateResult,
+    ReadResourceRequest,
+    ReadResourceResult,
     Resource,
     ResourceTemplate,
+    TextResourceContents,
 )
 
 
@@ -170,4 +173,19 @@ class TestResources:
         )
         protocol_data = result.to_protocol()
         from_protocol = ListResourceTemplateResult.from_protocol(protocol_data)
+        assert from_protocol == result
+
+    def test_read_resource_request_method_matches_spec(self):
+        spec_method_name = "resources/read"
+        request = ReadResourceRequest(uri="https://example.com/")
+        assert request.method == spec_method_name
+
+    def test_read_resource_result_roundtrips(self):
+        result = ReadResourceResult(
+            contents=[
+                TextResourceContents(uri="https://example.com/", text="Hello, world!"),
+            ],
+        )
+        protocol_data = result.to_protocol()
+        from_protocol = ReadResourceResult.from_protocol(protocol_data)
         assert from_protocol == result
