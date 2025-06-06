@@ -1083,6 +1083,58 @@ class PromptListChangedNotification(Notification):
     method: str = Field("notifications/prompts/list_changed", frozen=True)
 
 
+# --------- Logging specific ---------
+LoggingLevel = Literal[
+    "debug",
+    "info",
+    "notice",
+    "warning",
+    "error",
+    "critical",
+    "alert",
+    "emergency",
+]
+
+
+class SetLevelRequest(Request):
+    """
+    Request client sends to server to set/update the logging level.
+
+    The server should send all logs at `level` and more severe.
+    """
+
+    method: str = Field(default="logging/setLevel")
+    level: LoggingLevel
+    """
+    Level of logging the client wants to receive from the server.
+    """
+
+
+class LoggingMessageNotification(Notification):
+    """
+    Logging noticiation sent from server to client.
+
+    If the client didn't set a logging level, the server can decide which messages to
+    send automatically.
+    """
+
+    method: str = Field("notifications/message", frozen=True)
+    level: LoggingLevel
+    """
+    Severity of the log message.
+    """
+
+    logger: str | None = None
+    """
+    Name of the logger issuing the message.
+    """
+
+    data: Any
+    """
+    Any JSON serializable data to log.
+    """
+
+
 # --------- JSON-RPC Types ----------
 
 
