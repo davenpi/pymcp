@@ -18,7 +18,7 @@ from mcp.new_types import (
     JSONRPCRequest,
     JSONRPCResponse,
     ListResourcesRequest,
-    Ping,
+    PingRequest,
     ProgressNotification,
     ServerCapabilities,
 )
@@ -106,7 +106,7 @@ class TestJSONRPCSerializing:
         assert wire_data == expected_data
 
     def test_serializes_request_without_params(self):
-        ping = Ping()
+        ping = PingRequest()
         jsonrpc_req = JSONRPCRequest.from_request(ping, id=2)
         wire_data = jsonrpc_req.to_wire()
         expected_data = {"jsonrpc": JSONRPC_VERSION, "id": 2, "method": "ping"}

@@ -637,7 +637,7 @@ class EmbeddedResource(ProtocolModel):
     """
 
 
-class Ping(Request):
+class PingRequest(Request):
     """
     Heartbeat to check connection health. Sent by client or server.
 
