@@ -136,10 +136,6 @@ class Notification(ProtocolModel):
     Notifications are one-way messages that don't expect a response.
     """
 
-    method: str
-    """
-    The notification method name.
-    """
     metadata: dict[str, Any] | None = Field(default=None)
     """
     Additional notification metadata.
@@ -148,15 +144,6 @@ class Notification(ProtocolModel):
     @classmethod
     def from_protocol(cls: type[NotificationT], data: dict[str, Any]) -> NotificationT:
         """Convert from protocol-level representation"""
-        # Validate method if this is a concrete subclass
-        method_field = cls.model_fields.get("method")
-        if method_field and isinstance(method_field.default, str):
-            expected_method = method_field.default
-            actual_method = data.get("method")
-            if actual_method != expected_method:
-                raise ValueError(
-                    f"Can't create {cls.__name__} from '{actual_method}' method"
-                )
 
         # Extract params
         params = data.get("params", {})
@@ -190,8 +177,9 @@ class Notification(ProtocolModel):
             exclude_none=True,
             mode="json",
         )
-
-        result: dict[str, Any] = {"method": self.method}
+        # Attribute is defined on all subclasses but not on the base class. Ignore
+        # linter error.
+        result: dict[str, Any] = {"method": self.method}  # type: ignore[attr-defined]
 
         if self.metadata:
             params["_meta"] = self.metadata
@@ -470,7 +458,7 @@ class InitializedNotification(Notification):
     Sent by the client after processing the server's InitializeResult.
     """
 
-    method: str = Field(default="notifications/initialized", frozen=True)
+    method: Literal["notifications/initialized"] = "notifications/initialized"
 
 
 class InitializeResult(Result):
@@ -656,7 +644,7 @@ class CancelledNotification(Notification):
     Sent when a request is terminated before execution or completion.
     """
 
-    method: str = Field(default="notifications/cancelled", frozen=True)
+    method: Literal["notifications/cancelled"] = "notifications/cancelled"
     request_id: RequestId = Field(alias="requestId")
     """
     ID of the cancelled request.
@@ -675,7 +663,7 @@ class ProgressNotification(Notification):
     Links to a request via its progress_token.
     """
 
-    method: str = Field(default="notifications/progress", frozen=True)
+    method: Literal["notifications/progress"] = "notifications/progress"
     progress_token: ProgressToken = Field(alias="progressToken")
     """
     Token identifying the operation being tracked.
@@ -790,7 +778,9 @@ class ToolListChangedNotification(Notification):
     Servers can send this without clients registering for notifications.
     """
 
-    method: str = Field(default="notifications/tools/list_changed", frozen=True)
+    method: Literal["notifications/tools/list_changed"] = (
+        "notifications/tools/list_changed"
+    )
 
 
 # --------- Resource Specific ---------
@@ -942,7 +932,9 @@ class ReadResourceResult(Result):
 
 
 class ResourceListChangedNotification(Notification):
-    method: str = Field("notifications/resources/list_changed", frozen=True)
+    method: Literal["notifications/resources/list_changed"] = (
+        "notifications/resources/list_changed"
+    )
 
 
 class SubscribeRequest(Request):
@@ -970,7 +962,9 @@ class ResourceUpdatedNotification(Notification):
     Notification that a resource has been updated.
     """
 
-    method: str = Field("notifications/resources/updated", frozen=True)
+    method: Literal["notifications/resources/updated"] = (
+        "notifications/resources/updated"
+    )
     uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
 
 
@@ -1076,7 +1070,9 @@ class GetPromptResult(Result):
 
 
 class PromptListChangedNotification(Notification):
-    method: str = Field("notifications/prompts/list_changed", frozen=True)
+    method: Literal["notifications/prompts/list_changed"] = (
+        "notifications/prompts/list_changed"
+    )
 
 
 # --------- Logging specific ---------
@@ -1115,7 +1111,7 @@ class LoggingMessageNotification(Notification):
     send automatically.
     """
 
-    method: str = Field("notifications/message", frozen=True)
+    method: Literal["notifications/message"] = "notifications/message"
     level: LoggingLevel
     """
     Severity of the log message.
