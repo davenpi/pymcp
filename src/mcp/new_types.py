@@ -830,9 +830,6 @@ class Resource(ProtocolModel):
     usage.
     """
 
-    # # TODO: Maybe don't need to_protocol? It gets serialzed inside Result.to_protocol.
-    # def to_protocol(self) -> dict[str, Any]:
-    #     return self.model_dump(exclude_none=True, by_alias=True, mode="json")
 
 
 class ResourceTemplate(ProtocolModel):
