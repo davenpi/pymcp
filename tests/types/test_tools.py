@@ -202,11 +202,18 @@ class TestTools:
             input_schema=schema,
             annotations=annotations,
         )
+        metadata = {
+            "some": "metadata",
+            "other": "metadata",
+        }
 
-        original_result = ListToolsResult(tools=[tool], next_cursor="next_page")
+        original_result = ListToolsResult(
+            tools=[tool], next_cursor="next_page", metadata=metadata
+        )
 
         # This is the real test - full protocol conversion
         protocol_data = original_result.to_protocol()
+        assert protocol_data["_meta"] == metadata
         reconstructed_result = ListToolsResult.from_protocol(protocol_data)
 
         # Verify the nested Tool survived the roundtrip intact
@@ -234,3 +241,6 @@ class TestTools:
 
         # Test pagination survived
         assert reconstructed_result.next_cursor == "next_page"
+
+        # Test metadata survived
+        assert reconstructed_result.metadata == metadata
