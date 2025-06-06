@@ -16,10 +16,6 @@ class TestBaseClassSerialization:
     Deserialization is when we convert dicts into our types.
     """
 
-    # def test_request_rejects_missing_method(self):
-    #     with pytest.raises(ValidationError):
-    #         _ = Request(progress_token="progressing")
-
     def test_request_gets_progress_token_from_data(self):
         protocol_data = {"method": "test", "params": {"_meta": {"progressToken": 1}}}
         req = Request.from_protocol(protocol_data)

@@ -4,7 +4,7 @@ Test miscellaneous types like Pings, CancelledNotifications, etc.
 
 import pytest
 
-from mcp.new_types import CancelledNotification, PingRequest
+from mcp.new_types import CancelledNotification, EmptyResult, PingRequest
 
 
 class TestMisc:
@@ -30,3 +30,23 @@ class TestMisc:
         assert notif.reason == "no need"
         serialized = notif.to_protocol()
         assert serialized == protocol_data
+
+    def test_empty_result_with_metadata_round_trip(self):
+        """Test EmptyResult serializes metadata correctly."""
+        # Test with metadata
+        result_with_meta = EmptyResult(metadata={"operation": "delete", "count": 5})
+
+        protocol_data = result_with_meta.to_protocol()
+        reconstructed = EmptyResult.from_protocol(protocol_data)
+
+        assert reconstructed.metadata == {"operation": "delete", "count": 5}
+        assert protocol_data == {"_meta": {"operation": "delete", "count": 5}}
+
+        # Test without metadata (should be clean)
+        empty_result = EmptyResult()
+
+        protocol_data = empty_result.to_protocol()
+        reconstructed = EmptyResult.from_protocol(protocol_data)
+
+        assert reconstructed.metadata is None
+        assert protocol_data == {}  # Should be completely empty

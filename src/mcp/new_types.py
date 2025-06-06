@@ -255,6 +255,14 @@ class Result(ProtocolModel):
         return result
 
 
+class EmptyResult(Result):
+    """
+    Result that indicates success but carries no data.
+    """
+
+    pass
+
+
 class PaginatedResult(Result):
     """
     Base class for MCP results that support pagination.
@@ -1503,3 +1511,67 @@ class JSONRPCError(ProtocolModel):
         protocol_data["jsonrpc"] = self.jsonrpc
         protocol_data["id"] = self.id
         return protocol_data
+
+
+ClientRequest = (
+    PingRequest
+    | InitializeRequest
+    | CompleteRequest
+    | SetLevelRequest
+    | GetPromptRequest
+    | ListPromptsRequest
+    | ListResourcesRequest
+    | ListResourceTemplatesRequest
+    | ReadResourceRequest
+    | SubscribeRequest
+    | UnsubscribeRequest
+    | CallToolRequest
+    | ListToolsRequest
+)
+
+ClientNotification = (
+    CancelledNotification
+    | ProgressNotification
+    | InitializedNotification
+    | RootsListChangedNotification
+)
+
+ClientResult = EmptyResult | CreateMessageResult | ListRootsResult
+
+ServerRequest = PingRequest | CreateMessageRequest | ListToolsRequest
+
+ServerNotification = (
+    CancelledNotification
+    | ProgressNotification
+    | LoggingMessageNotification
+    | ResourceUpdatedNotification
+    | ResourceListChangedNotification
+    | ToolListChangedNotification
+    | PromptListChangedNotification
+)
+
+ServerResult = (
+    EmptyResult
+    | InitializeResult
+    | CompleteResult
+    | GetPromptResult
+    | ListPromptsResult
+    | ListResourceTemplatesResult
+    | ListResourcesResult
+    | ReadResourceResult
+    | CallToolResult
+    | ListToolsResult
+)
+
+JSONRPCBatchRequest = list[JSONRPCRequest | JSONRPCNotification]
+
+JSONRPCBatchResponse = list[JSONRPCResponse | JSONRPCError]
+
+JSONRPCMessage = (
+    JSONRPCRequest
+    | JSONRPCNotification
+    | JSONRPCBatchRequest
+    | JSONRPCResponse
+    | JSONRPCError
+    | JSONRPCBatchResponse
+)
