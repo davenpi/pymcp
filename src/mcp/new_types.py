@@ -36,11 +36,6 @@ class Request(ProtocolModel):
     Note: `progress_token` overrides `metadata["progressToken"]` if both are set.
     """
 
-    method: str
-    """
-    The request method name.
-    """
-
     progress_token: ProgressToken | None = None
     """
     Token (str or int) to identify this request for progress updates.
@@ -121,7 +116,10 @@ class Request(ProtocolModel):
         if meta:
             params["_meta"] = meta
 
-        result: dict[str, Any] = {"method": self.method}
+        if hasattr(self, "method"):
+            result: dict[str, Any] = {"method": self.method}  # type: ignore
+        else:
+            result: dict[str, Any] = {}
         if params:
             result["params"] = params
 
@@ -765,7 +763,8 @@ class ListToolsRequest(PaginatedRequest):
     Request to list available tools with optional pagination.
     """
 
-    method: str = Field(default="tools/list", frozen=True)
+    # method: str = Field(default="tools/list", frozen=True)
+    method: Literal["tools/list"] = "tools/list"
 
 
 class ListToolsResult(PaginatedResult):
@@ -781,7 +780,8 @@ class CallToolRequest(Request):
     Request to call a tool.
     """
 
-    method: str = Field(default="tools/call", frozen=True)
+    # method: str = Field(default="tools/call", frozen=True)
+    method: Literal["tools/call"] = "tools/call"
     name: str
     arguments: dict[str, Any] | None = None
 
@@ -844,9 +844,9 @@ class Resource(ProtocolModel):
     usage.
     """
 
-    # TODO: Maybe don't need to_protocol? It gets serialzed inside Result.to_protocol.
-    def to_protocol(self) -> dict[str, Any]:
-        return self.model_dump(exclude_none=True, by_alias=True, mode="json")
+    # # TODO: Maybe don't need to_protocol? It gets serialzed inside Result.to_protocol.
+    # def to_protocol(self) -> dict[str, Any]:
+    #     return self.model_dump(exclude_none=True, by_alias=True, mode="json")
 
 
 class ResourceTemplate(ProtocolModel):
@@ -893,7 +893,8 @@ class ListResourcesRequest(PaginatedRequest):
     Request to list available resources with optional pagination.
     """
 
-    method: str = Field("resources/list", frozen=True)
+    # method: str = Field("resources/list", frozen=True)
+    method: Literal["resources/list"] = "resources/list"
 
 
 class ListResourcesResult(PaginatedResult):
@@ -912,7 +913,8 @@ class ListResourceTemplatesRequest(PaginatedRequest):
     Request to list available resource templates with optional pagination.
     """
 
-    method: str = Field("resources/templates/list", frozen=True)
+    # method: str = Field("resources/templates/list", frozen=True)
+    method: Literal["resources/templates/list"] = "resources/templates/list"
 
 
 class ListResourceTemplatesResult(PaginatedResult):
@@ -931,7 +933,8 @@ class ReadResourceRequest(Request):
     Request to read a resource at a given URI.
     """
 
-    method: str = Field("resources/read", frozen=True)
+    # method: str = Field("resources/read", frozen=True)
+    method: Literal["resources/read"] = "resources/read"
     uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
     """
     URI of the resource to read.
@@ -958,7 +961,8 @@ class SubscribeRequest(Request):
     Request to subscribe to resource update notifications for a given resource.
     """
 
-    method: str = Field("resources/subscribe", frozen=True)
+    # method: str = Field("resources/subscribe", frozen=True)
+    method: Literal["resoruces/subscribe"] = "resoruces/subscribe"
     uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
 
 
@@ -967,7 +971,8 @@ class UnsubscribeRequest(Request):
     Request to unsubscribe from resource update notifications for a given resource.
     """
 
-    method: str = Field("resources/unsubscribe", frozen=True)
+    # method: str = Field("resources/unsubscribe", frozen=True)
+    method: Literal["resources/unsubscribe"] = "resources/unsubscribe"
     uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
 
 
@@ -1029,7 +1034,8 @@ class ListPromptsRequest(PaginatedRequest):
     Sent by client to list available prompts and prompt templates on the server.
     """
 
-    method: str = Field("prompts/list", frozen=True)
+    # method: str = Field("prompts/list", frozen=True)
+    method: Literal["prompts/list"] = "prompts/list"
 
 
 class ListPromptsResult(PaginatedResult):
@@ -1051,7 +1057,8 @@ class GetPromptRequest(Request):
     filled in.
     """
 
-    method: str = Field("prompts/get", frozen=True)
+    # method: str = Field("prompts/get", frozen=True)
+    method: Literal["prompts/get"] = "prompts/get"
     name: str
     """
     The name of the prompt or prompt template.
@@ -1103,7 +1110,8 @@ class SetLevelRequest(Request):
     The server should send all logs at `level` and more severe.
     """
 
-    method: str = Field(default="logging/setLevel")
+    # method: str = Field(default="logging/setLevel")
+    method: Literal["logging/setLevel"] = "logging/setLevel"
     level: LoggingLevel
     """
     Level of logging the client wants to receive from the server.

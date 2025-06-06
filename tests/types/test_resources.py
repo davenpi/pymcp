@@ -65,18 +65,15 @@ class TestResources:
             uri="https://example.com",
             name="Example",
             mime_type="text/plain",
+            size_in_bytes=1,
         )
-        assert resource.to_protocol()["mimeType"] == "text/plain"
-        assert "mime_type" not in resource.to_protocol()
-
-    def test_resource_serializes_with_size_alias(self):
-        resource = Resource(
-            uri="https://example.com",
-            name="Example",
-            size_in_bytes=1024,
-        )
-        assert resource.to_protocol()["size"] == 1024
-        assert "size_in_bytes" not in resource.to_protocol()
+        result = ListResourcesResult(resources=[resource])
+        serialized = result.to_protocol()
+        serialized_resource = serialized["resources"][0]
+        print("protocol", serialized)
+        assert "mime_type" not in serialized_resource
+        assert serialized_resource["mimeType"] == "text/plain"
+        assert serialized_resource["size"] == 1
 
     def test_list_resource_result_serialize_uri_to_string_not_anyurl(self):
         resource = Resource(
@@ -103,35 +100,27 @@ class TestResources:
         expeceted = {"audience": ["user"], "priority": 0.5}
         assert protocol_data == expeceted
 
-    def test_resource_serializes_with_annotation(self):
+    def test_resource_result_serializes_with_annotation(self):
         resource = Resource(
             uri="https://example.com",
             name="Example",
             annotations=Annotations(audience="user", priority=0.5),
         )
+        result = ListResourcesResult(resources=[resource])
         expected = {
-            "uri": "https://example.com/",
-            "name": "Example",
-            "annotations": {"audience": ["user"], "priority": 0.5},
+            "resources": [
+                {
+                    "uri": "https://example.com/",
+                    "name": "Example",
+                    "annotations": {"audience": ["user"], "priority": 0.5},
+                }
+            ]
         }
-        assert resource.to_protocol() == expected
+        assert result.to_protocol() == expected
 
     def test_resource_rejects_invalid_uri(self):
         with pytest.raises(ValidationError):
             Resource(uri="not-a-uri", name="Test")
-
-    def test_resource_uses_protocol_aliases_for_serialization(self):
-        resource = Resource(
-            uri="file:///test.txt",
-            name="Test File",
-            mime_type="text/plain",
-            size_in_bytes=1024,
-        )
-        result = resource.to_protocol()
-        assert result["mimeType"] == "text/plain"
-        assert result["size"] == 1024
-        assert "mime_type" not in result
-        assert "size_in_bytes" not in result
 
     def test_resource_normalizes_uri_schemes_as_expected(self):
         test_cases = [
