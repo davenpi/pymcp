@@ -62,14 +62,6 @@ class Request(ProtocolModel):
     @classmethod
     def from_protocol(cls: type[RequestT], data: dict[str, Any]) -> RequestT:
         """Convert from protocol-level representation."""
-        method_field = cls.model_fields.get("method")
-        if method_field and isinstance(method_field.default, str):
-            expected_method = method_field.default
-            actual_method = data.get("method")
-            if actual_method != expected_method:
-                raise ValueError(
-                    f"Can't create {cls.__name__} from '{actual_method}' method"
-                )
 
         # Extract protocol structure
         params = data.get("params", {})
@@ -116,10 +108,7 @@ class Request(ProtocolModel):
         if meta:
             params["_meta"] = meta
 
-        if hasattr(self, "method"):
-            result: dict[str, Any] = {"method": self.method}  # type: ignore
-        else:
-            result: dict[str, Any] = {}
+        result: dict[str, Any] = {"method": self.method}  # type: ignore[attr-defined]
         if params:
             result["params"] = params
 
@@ -459,7 +448,7 @@ class InitializeRequest(Request):
     information.
     """
 
-    method: str = Field(default="initialize", frozen=True)
+    method: Literal["initialize"] = "initialize"
     protocol_version: str = Field(
         default=PROTOCOL_VERSION, alias="protocolVersion", frozen=True
     )
@@ -657,7 +646,7 @@ class Ping(Request):
     Must be answered promptly to maintain connection.
     """
 
-    method: str = Field(default="ping", frozen=True)
+    method: Literal["ping"] = "ping"
 
 
 class CancelledNotification(Notification):
