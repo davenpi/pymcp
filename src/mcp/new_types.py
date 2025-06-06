@@ -108,6 +108,8 @@ class Request(ProtocolModel):
         if meta:
             params["_meta"] = meta
 
+        # Attribute is defined on all subclasses but not on the base class. Ignore
+        # linter error.
         result: dict[str, Any] = {"method": self.method}  # type: ignore[attr-defined]
         if params:
             result["params"] = params
