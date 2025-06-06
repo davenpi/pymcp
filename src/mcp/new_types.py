@@ -951,7 +951,7 @@ class SubscribeRequest(Request):
     Request to subscribe to resource update notifications for a given resource.
     """
 
-    method: Literal["resoruces/subscribe"] = "resoruces/subscribe"
+    method: Literal["resources/subscribe"] = "resources/subscribe"
     uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
 
 
