@@ -513,6 +513,38 @@ class InitializeResult(Result):
 # --------- Cross-cutting types ----------
 
 
+class ResourceContents(ProtocolModel):
+    """
+    Base class for resource contents.
+    """
+
+    uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
+    mime_type: str | None = Field(default=None, alias="mimeType")
+
+
+class TextResourceContents(ResourceContents):
+    """
+    Resource contents represented as text (not binary text).
+    """
+
+    text: str
+    """
+    The text of the resource. Only set if the resource can be represented as text
+    (not binary text).
+    """
+
+
+class BlobResourceContents(ResourceContents):
+    """
+    Resource contents represented as a binary blob.
+    """
+
+    blob: str
+    """
+    Base64-encoded string representing the binary data of the resource.
+    """
+
+
 class Annotations(ProtocolModel):
     """
     Display hints for client rendering.
@@ -547,6 +579,77 @@ class Annotations(ProtocolModel):
     def to_protocol(self) -> dict[str, Any]:
         """Model dump to dict. Note 'audience' gets serialized to a list!"""
         return self.model_dump(exclude_none=True, mode="json")
+
+
+class TextContent(ProtocolModel):
+    """Text provided to or from an LLM."""
+
+    type: str = Field("text", frozen=True)
+    text: str
+    """
+    The text content of the message.
+    """
+
+    annotations: Annotations | None = None
+    """
+    Display hints for client use and rendering.
+    """
+
+
+class ImageContent(ProtocolModel):
+    """
+    An image provided to or from an LLM.
+
+    Image is provided as base64-encoded data.
+    """
+
+    type: str = Field("image", frozen=True)
+    mime_type: str = Field(alias="mimeType")
+    data: str
+    """
+    The base64-encoded image data.
+    """
+
+    annotations: Annotations | None = None
+    """
+    Display hints for client use and rendering.
+    """
+
+
+class AudioContent(ProtocolModel):
+    """
+    Audio provided to or from an LLM.
+
+    Audio is provided as base64-encoded data.
+    """
+
+    type: str = Field("audio", frozen=True)
+    mime_type: str = Field(alias="mimeType")
+    data: str
+    """
+    The base64-encoded audio data
+    """
+
+    annotations: Annotations | None = None
+    """
+    Display hints for client use and rendering.
+    """
+
+
+class EmbeddedResource(ProtocolModel):
+    """
+    The contents of a resource that is embedded in a prompt or tool call result.
+
+    Client determines how to display the resource for the benefit of the LLM and/or
+    user.
+    """
+
+    type: str = Field("resource", frozen=True)
+    resource: TextResourceContents | BlobResourceContents
+    annotations: Annotations
+    """
+    Display hints for client use and rendering.
+    """
 
 
 class Ping(Request):
@@ -673,6 +776,42 @@ class ListToolsResult(PaginatedResult):
     tools: list[Tool]
 
 
+class CallToolRequest(Request):
+    """
+    Request to call a tool.
+    """
+
+    method: str = Field(default="tools/call", frozen=True)
+
+    name: str
+    """
+    The name of the tool to call.
+    """
+
+    arguments: dict[str, Any] | None = None
+    """
+    The arguments to pass to the tool.
+    """
+
+
+class CallToolResult(Result):
+    content: list[TextContent | ImageContent | AudioContent | EmbeddedResource]
+    is_error: bool = Field(default=False, alias="isError")
+    """
+    Whether the tool call resulted in an error.
+    """
+
+
+class ToolListChangedNotification(Notification):
+    """
+    Notification that the list of tools has changed.
+
+    Servers can send this without clients registering for notifications.
+    """
+
+    method: str = Field(default="notifications/tools/list_changed", frozen=True)
+
+
 # --------- Resource Specific ---------
 
 
@@ -716,38 +855,6 @@ class Resource(ProtocolModel):
     # TODO: Maybe don't need to_protocol? It gets serialzed inside Result.to_protocol.
     def to_protocol(self) -> dict[str, Any]:
         return self.model_dump(exclude_none=True, by_alias=True, mode="json")
-
-
-class ResourceContents(ProtocolModel):
-    """
-    Base class for resource contents.
-    """
-
-    uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
-    mime_type: str | None = Field(default=None, alias="mimeType")
-
-
-class TextResourceContents(ResourceContents):
-    """
-    Resource contents represented as text (not binary text).
-    """
-
-    text: str
-    """
-    The text of the resource. Only set if the resource can be represented as text
-    (not binary text).
-    """
-
-
-class BlobResourceContents(ResourceContents):
-    """
-    Resource contents represented as a binary blob.
-    """
-
-    blob: str
-    """
-    Base64-encoded string representing the binary data of the resource.
-    """
 
 
 class ResourceTemplate(ProtocolModel):
@@ -913,77 +1020,6 @@ class Prompt(ProtocolModel):
     arguments: list[PromptArgument] | None = None
     """
     List of arguments used for templating the prompt.
-    """
-
-
-class TextContent(ProtocolModel):
-    """Text provided to or from an LLM."""
-
-    type: str = Field("text", frozen=True)
-    text: str
-    """
-    The text content of the message.
-    """
-
-    annotations: Annotations | None = None
-    """
-    Display hints for client use and rendering.
-    """
-
-
-class ImageContent(ProtocolModel):
-    """
-    An image provided to or from an LLM.
-
-    Image is provided as base64-encoded data.
-    """
-
-    type: str = Field("image", frozen=True)
-    mime_type: str = Field(alias="mimeType")
-    data: str
-    """
-    The base64-encoded image data.
-    """
-
-    annotations: Annotations | None = None
-    """
-    Display hints for client use and rendering.
-    """
-
-
-class AudioContent(ProtocolModel):
-    """
-    Audio provided to or from an LLM.
-
-    Audio is provided as base64-encoded data.
-    """
-
-    type: str = Field("audio", frozen=True)
-    mime_type: str = Field(alias="mimeType")
-    data: str
-    """
-    The base64-encoded audio data
-    """
-
-    annotations: Annotations | None = None
-    """
-    Display hints for client use and rendering.
-    """
-
-
-class EmbeddedResource(ProtocolModel):
-    """
-    The contents of a resource that is embedded in a prompt or tool call result.
-
-    Client determines how to display the resource for the benefit of the LLM and/or
-    user.
-    """
-
-    type: str = Field("resource", frozen=True)
-    resource: TextResourceContents | BlobResourceContents
-    annotations: Annotations
-    """
-    Display hints for client use and rendering.
     """
 
 
