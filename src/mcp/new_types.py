@@ -557,7 +557,7 @@ class Annotations(ProtocolModel):
     Target audience roles. Single role or list of roles.
     """
 
-    priority: float | None = None
+    priority: float | int | None = None
     """
     Priority level from 0 (lowest) to 1 (highest).
     """
@@ -571,7 +571,7 @@ class Annotations(ProtocolModel):
 
     @field_validator("priority")
     @classmethod
-    def validate_priority(cls, v: float | None):
+    def validate_priority(cls, v: float | int | None):
         if v is not None and not (0 <= v <= 1):
             raise ValueError("priority must be between 0 and 1")
         return v
@@ -646,7 +646,7 @@ class EmbeddedResource(ProtocolModel):
 
     type: str = Field("resource", frozen=True)
     resource: TextResourceContents | BlobResourceContents
-    annotations: Annotations
+    annotations: Annotations | None = None
     """
     Display hints for client use and rendering.
     """
@@ -782,16 +782,8 @@ class CallToolRequest(Request):
     """
 
     method: str = Field(default="tools/call", frozen=True)
-
     name: str
-    """
-    The name of the tool to call.
-    """
-
     arguments: dict[str, Any] | None = None
-    """
-    The arguments to pass to the tool.
-    """
 
 
 class CallToolResult(Result):
