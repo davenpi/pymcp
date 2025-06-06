@@ -2,7 +2,17 @@
 Test tool-related types.
 """
 
-from mcp.new_types import ListToolsRequest, ProgressNotification
+import pytest
+from pydantic import ValidationError
+
+from mcp.new_types import (
+    InputSchema,
+    ListToolsRequest,
+    ListToolsResult,
+    ProgressNotification,
+    Tool,
+    ToolAnnotations,
+)
 
 
 class TestTools:
@@ -113,3 +123,114 @@ class TestTools:
 
         serialized = notif.to_protocol()
         assert "_meta" not in serialized["params"]
+
+    def test_list_tools_request_roundtrip(self):
+        """Test ListToolsRequest protocol conversion."""
+        request = ListToolsRequest(cursor="page_2")
+
+        protocol_data = request.to_protocol()
+        reconstructed = ListToolsRequest.from_protocol(protocol_data)
+
+        assert reconstructed == request
+        assert reconstructed.method == "tools/list"
+        assert reconstructed.cursor == "page_2"
+
+    def test_list_tools_result_roundtrip(self):
+        """Test ListToolsResult with tools survives protocol conversion."""
+        schema = InputSchema(
+            type="object",
+            properties={
+                "query": {"type": "string", "description": "Search term"},
+                "limit": {"type": "integer", "minimum": 1, "default": 10},
+            },
+            required=["query"],
+        )
+
+        tool = Tool(
+            name="search_files",
+            description="Search for files",
+            input_schema=schema,
+        )
+
+        result = ListToolsResult(tools=[tool], next_cursor="next_page_token")
+
+        protocol_data = result.to_protocol()
+        reconstructed = ListToolsResult.from_protocol(protocol_data)
+
+        assert reconstructed == result
+        assert len(reconstructed.tools) == 1
+        assert reconstructed.tools[0].name == "search_files"
+        assert (
+            reconstructed.tools[0].input_schema.properties["query"]["type"] == "string"
+        )
+        assert reconstructed.next_cursor == "next_page_token"
+
+    def test_input_schema_validation(self):
+        """Test that InputSchema validates properly."""
+        # Valid schema
+        schema = InputSchema(
+            type="object", properties={"name": {"type": "string"}}, required=["name"]
+        )
+        assert schema.type == "object"
+
+        # Type is frozen, should be "object"
+        with pytest.raises(ValidationError):
+            InputSchema(type="array")  # Should fail if frozen=True works
+
+    def test_list_tools_result_protocol_roundtrip_complex_nested_schema(self):
+        schema = InputSchema(
+            properties={
+                "config": {
+                    "type": "object",
+                    "properties": {
+                        "timeout": {"type": "integer"},
+                        "retries": {"type": "integer"},
+                    },
+                },
+                "files": {"type": "array", "items": {"type": "string"}},
+            },
+            required=["config"],
+        )
+
+        annotations = ToolAnnotations(
+            title="Complex Tool", read_only_hint=True, destructive_hint=False
+        )
+
+        tool = Tool(
+            name="complex_tool",
+            description="A tool with complex schema",
+            input_schema=schema,
+            annotations=annotations,
+        )
+
+        original_result = ListToolsResult(tools=[tool], next_cursor="next_page")
+
+        # This is the real test - full protocol conversion
+        protocol_data = original_result.to_protocol()
+        reconstructed_result = ListToolsResult.from_protocol(protocol_data)
+
+        # Verify the nested Tool survived the roundtrip intact
+        assert len(reconstructed_result.tools) == 1
+        reconstructed_tool = reconstructed_result.tools[0]
+
+        # Test that complex nested schema properties survived
+        assert reconstructed_tool.input_schema.properties["config"]["type"] == "object"
+        assert (
+            reconstructed_tool.input_schema.properties["config"]["properties"][
+                "timeout"
+            ]["type"]
+            == "integer"
+        )
+        assert (
+            reconstructed_tool.input_schema.properties["files"]["items"]["type"]
+            == "string"
+        )
+        assert reconstructed_tool.input_schema.required == ["config"]
+
+        # Test that annotations survived with proper alias conversion
+        assert reconstructed_tool.annotations.title == "Complex Tool"
+        assert reconstructed_tool.annotations.read_only_hint is True
+        assert reconstructed_tool.annotations.destructive_hint is False
+
+        # Test pagination survived
+        assert reconstructed_result.next_cursor == "next_page"

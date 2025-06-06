@@ -615,7 +615,7 @@ class InputSchema(ProtocolModel):
     JSON schema for the tool's input parameters.
     """
 
-    type: str = Field("object", frozen=True)
+    type: Literal["object"] = Field(default="object", frozen=True)
     properties: dict[str, Any] | None = None
     required: list[str] | None = None
 
