@@ -12,10 +12,17 @@ from pydantic import (
 
 PROTOCOL_VERSION = "2025-03-26"
 JSONRPC_VERSION = "2.0"
-RequestId = int | str
-ProgressToken = str | int
-Cursor = str
-Role = Literal["user", "assistant"]
+RequestId = Annotated[
+    int | str, "Unique identifier for a request. Can be a string or integer."
+]
+ProgressToken = Annotated[
+    str | int, "Token used to track progress of long-running operations."
+]
+Cursor = Annotated[str, "Opaque string used for pagination in list operations."]
+Role = Annotated[
+    Literal["user", "assistant"],
+    "Sender or recipient of messages and data in a conversation.",
+]
 
 RequestT = TypeVar("RequestT", bound="Request")
 NotificationT = TypeVar("NotificationT", bound="Notification")
@@ -742,7 +749,6 @@ class ListToolsRequest(PaginatedRequest):
     Request to list available tools with optional pagination.
     """
 
-    # method: str = Field(default="tools/list", frozen=True)
     method: Literal["tools/list"] = "tools/list"
 
 
@@ -759,7 +765,6 @@ class CallToolRequest(Request):
     Request to call a tool.
     """
 
-    # method: str = Field(default="tools/call", frozen=True)
     method: Literal["tools/call"] = "tools/call"
     name: str
     arguments: dict[str, Any] | None = None
@@ -874,7 +879,6 @@ class ListResourcesRequest(PaginatedRequest):
     Request to list available resources with optional pagination.
     """
 
-    # method: str = Field("resources/list", frozen=True)
     method: Literal["resources/list"] = "resources/list"
 
 
@@ -894,7 +898,6 @@ class ListResourceTemplatesRequest(PaginatedRequest):
     Request to list available resource templates with optional pagination.
     """
 
-    # method: str = Field("resources/templates/list", frozen=True)
     method: Literal["resources/templates/list"] = "resources/templates/list"
 
 
@@ -914,7 +917,6 @@ class ReadResourceRequest(Request):
     Request to read a resource at a given URI.
     """
 
-    # method: str = Field("resources/read", frozen=True)
     method: Literal["resources/read"] = "resources/read"
     uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
     """
@@ -944,7 +946,6 @@ class SubscribeRequest(Request):
     Request to subscribe to resource update notifications for a given resource.
     """
 
-    # method: str = Field("resources/subscribe", frozen=True)
     method: Literal["resoruces/subscribe"] = "resoruces/subscribe"
     uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
 
@@ -954,7 +955,6 @@ class UnsubscribeRequest(Request):
     Request to unsubscribe from resource update notifications for a given resource.
     """
 
-    # method: str = Field("resources/unsubscribe", frozen=True)
     method: Literal["resources/unsubscribe"] = "resources/unsubscribe"
     uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
 
@@ -1019,7 +1019,6 @@ class ListPromptsRequest(PaginatedRequest):
     Sent by client to list available prompts and prompt templates on the server.
     """
 
-    # method: str = Field("prompts/list", frozen=True)
     method: Literal["prompts/list"] = "prompts/list"
 
 
@@ -1042,7 +1041,6 @@ class GetPromptRequest(Request):
     filled in.
     """
 
-    # method: str = Field("prompts/get", frozen=True)
     method: Literal["prompts/get"] = "prompts/get"
     name: str
     """
@@ -1078,15 +1076,18 @@ class PromptListChangedNotification(Notification):
 
 
 # --------- Logging specific ---------
-LoggingLevel = Literal[
-    "debug",
-    "info",
-    "notice",
-    "warning",
-    "error",
-    "critical",
-    "alert",
-    "emergency",
+LoggingLevel = Annotated[
+    Literal[
+        "debug",
+        "info",
+        "notice",
+        "warning",
+        "error",
+        "critical",
+        "alert",
+        "emergency",
+    ],
+    "Level of logging the client wants to receive from the server.",
 ]
 
 
@@ -1097,11 +1098,10 @@ class SetLevelRequest(Request):
     The server should send all logs at `level` and more severe.
     """
 
-    # method: str = Field(default="logging/setLevel")
     method: Literal["logging/setLevel"] = "logging/setLevel"
     level: LoggingLevel
     """
-    Level of logging the client wants to receive from the server.
+    Client requests logs at this level and more severe.
     """
 
 
@@ -1143,7 +1143,7 @@ class JSONRPCRequest(ProtocolModel):
     jsonrpc: str = Field(default=JSONRPC_VERSION, frozen=True)
     id: RequestId
     """
-    Unique identifier for matching requests to responses.
+    Unique identifier for matching requests to responses. String or integer.
     """
 
     request: Request
