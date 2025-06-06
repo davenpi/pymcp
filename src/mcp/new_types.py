@@ -1263,6 +1263,61 @@ class CreateMessageResult(Result):
     """The reason why sampling stopped, if known."""
 
 
+# --------- Completions specific ---------
+class PromptReference(ProtocolModel):
+    """
+    Reference to a prompt.
+    """
+
+    type: Literal["ref/prompt"] = "ref/prompt"
+    name: str
+
+
+class ResourceReference(ProtocolModel):
+    """
+    Reference to a resource.
+    """
+
+    type: Literal["ref/resource"] = "ref/resource"
+    uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
+    """
+    URI or URI template of the resource.
+    """
+
+
+class Completion(ProtocolModel):
+    """
+    Completion response containing multiple available options.
+    """
+
+    values: Annotated[list[str], Field(max_length=100)]
+    total: int | None = None
+    has_more: bool | None = Field(default=None, alias="hasMore")
+
+
+class CompletionArgument(ProtocolModel):
+    """
+    Arguments for the completion request.
+    """
+
+    name: str
+    value: str
+
+
+class CompleteRequest(Request):
+    """
+    Request from client to server to ask for completion options.
+    """
+
+    method: Literal["completion/complete"] = "completion/complete"
+    ref: PromptReference | ResourceReference
+    argument: CompletionArgument
+
+
+class CompleteResult(Result):
+    completion: Completion
+
+
 # --------- JSON-RPC Types ----------
 
 
