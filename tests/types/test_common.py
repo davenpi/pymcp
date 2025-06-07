@@ -4,7 +4,7 @@ Test miscellaneous types like Pings, CancelledNotifications, etc.
 
 import pytest
 
-from mcp.new_types import CancelledNotification, EmptyResult, PingRequest
+from mcp.protocol.common import CancelledNotification, EmptyResult, PingRequest
 
 
 class TestMisc:
