@@ -5,7 +5,7 @@ Test resource-related types.
 import pytest
 from pydantic import ValidationError
 
-from mcp.new_types import (
+from mcp.protocol.resources import (
     Annotations,
     ListResourcesRequest,
     ListResourcesResult,
