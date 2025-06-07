@@ -1,6 +1,6 @@
 import pytest
 
-from mcp.new_types import (
+from mcp.protocol.sampling import (
     CreateMessageRequest,
     CreateMessageResult,
     ModelPreferences,
