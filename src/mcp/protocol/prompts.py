@@ -51,6 +51,15 @@ class Prompt(ProtocolModel):
     """
 
 
+class PromptReference(ProtocolModel):
+    """
+    Reference to a prompt.
+    """
+
+    type: Literal["ref/prompt"] = "ref/prompt"
+    name: str
+
+
 class PromptMessage(ProtocolModel):
     """
     Describes a message as a part of a prompt.

@@ -51,6 +51,18 @@ class Resource(ProtocolModel):
     """
 
 
+class ResourceReference(ProtocolModel):
+    """
+    Reference to a resource.
+    """
+
+    type: Literal["ref/resource"] = "ref/resource"
+    uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
+    """
+    URI or URI template of the resource.
+    """
+
+
 class ResourceTemplate(ProtocolModel):
     """
     A template for a set of resources that the server can read from.
