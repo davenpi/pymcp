@@ -6,9 +6,9 @@ from mcp.protocol.completions import (
     CompleteResult,
     Completion,
     CompletionArgument,
-    PromptReference,
-    ResourceReference,
 )
+from mcp.protocol.prompts import PromptReference
+from mcp.protocol.resources import ResourceReference
 
 
 class TestCompletions:
