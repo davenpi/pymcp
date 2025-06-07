@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from mcp.new_types import (
+from mcp.protocol.roots import (
     ListRootsRequest,
     ListRootsResult,
     Root,
