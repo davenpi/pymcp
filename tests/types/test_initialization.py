@@ -2,8 +2,8 @@
 Test initialization-related types.
 """
 
-from mcp.new_types import (
-    PROTOCOL_VERSION,
+from mcp.protocol.base import PROTOCOL_VERSION
+from mcp.protocol.initialization import (
     ClientCapabilities,
     Implementation,
     InitializedNotification,

@@ -7,7 +7,7 @@ import copy
 import pytest
 from pydantic import ValidationError
 
-from mcp.new_types import Error, Notification, Request, Result
+from mcp.protocol.base import Error, Notification, Request, Result
 
 
 class TestBaseClassSerialization:

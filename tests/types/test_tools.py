@@ -5,11 +5,11 @@ Test tool-related types.
 import pytest
 from pydantic import ValidationError
 
-from mcp.new_types import (
+from mcp.protocol.common import ProgressNotification
+from mcp.protocol.tools import (
     InputSchema,
     ListToolsRequest,
     ListToolsResult,
-    ProgressNotification,
     Tool,
     ToolAnnotations,
 )
