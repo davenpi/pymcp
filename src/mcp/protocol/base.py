@@ -9,7 +9,6 @@ from pydantic import (
 )
 
 PROTOCOL_VERSION = "2025-03-26"
-JSONRPC_VERSION = "2.0"
 RequestId = Annotated[
     int | str, "Unique identifier for a request. Can be a string or integer."
 ]

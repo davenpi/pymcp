@@ -5,23 +5,23 @@ Test JSONRPC serialization.
 import pytest
 from pydantic import ValidationError
 
-from mcp.new_types import (
-    JSONRPC_VERSION,
-    PROTOCOL_VERSION,
+from mcp.protocol.base import PROTOCOL_VERSION, Error
+from mcp.protocol.common import PingRequest, ProgressNotification
+from mcp.protocol.initialization import (
     ClientCapabilities,
-    Error,
     Implementation,
     InitializeRequest,
     InitializeResult,
+    ServerCapabilities,
+)
+from mcp.protocol.jsonrpc import (
+    JSONRPC_VERSION,
     JSONRPCError,
     JSONRPCNotification,
     JSONRPCRequest,
     JSONRPCResponse,
-    ListResourcesRequest,
-    PingRequest,
-    ProgressNotification,
-    ServerCapabilities,
 )
+from mcp.protocol.resources import ListResourcesRequest
 
 
 class TestJSONRPCSerializing:
