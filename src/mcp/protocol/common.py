@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from mcp.protocol.base import Notification, ProgressToken, Request, RequestId
+from mcp.protocol.base import Notification, ProgressToken, Request, RequestId, Result
 
 
 class PingRequest(Request):
@@ -61,3 +61,11 @@ class ProgressNotification(Notification):
     """
     Optional progress description or status message.
     """
+
+
+class EmptyResult(Result):
+    """
+    Result that indicates success but carries no data.
+    """
+
+    pass

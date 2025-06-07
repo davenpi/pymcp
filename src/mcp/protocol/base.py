@@ -252,14 +252,6 @@ class Result(ProtocolModel):
         return result
 
 
-class EmptyResult(Result):
-    """
-    Result that indicates success but carries no data.
-    """
-
-    pass
-
-
 class PaginatedResult(Result):
     """
     Base class for MCP results that support pagination.
