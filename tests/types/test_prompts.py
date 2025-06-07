@@ -1,4 +1,4 @@
-from src.mcp.new_types import (
+from mcp.protocol.prompts import (
     GetPromptRequest,
     GetPromptResult,
     ListPromptsRequest,
