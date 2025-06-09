@@ -44,35 +44,3 @@ class MockTransport(Transport):
 
     async def close(self) -> None:
         self.closed = True
-
-
-async def test_mock_transport():
-    """Test the mock transport works."""
-
-    transport = MockTransport()
-
-    # Test send
-    await transport.send({"method": "test"}, {"auth": "token"})
-    assert len(transport.sent_messages) == 1
-    assert transport.sent_messages[0].payload["method"] == "test"
-    assert transport.sent_messages[0].metadata["auth"] == "token"
-
-    # Test receive
-    transport.queue_message({"result": "success"})
-    message = await transport.receive()
-    assert message.payload["result"] == "success"
-
-    # Test the helper
-    transport.queue_response(request_id=123, result={"data": "test"})
-    response = await transport.receive()
-    assert response.payload["id"] == 123
-    assert response.payload["result"]["data"] == "test"
-
-    # Test context manager
-    async with MockTransport() as t:
-        await t.send({"test": True})
-    assert t.closed
-
-
-if __name__ == "__main__":
-    asyncio.run(test_mock_transport())
