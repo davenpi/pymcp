@@ -24,7 +24,7 @@ class ClientSession:
         if self._running:
             return
         self._running = True
-        asyncio.create_task(self._message_loop())
+        self._task = asyncio.create_task(self._message_loop())
 
     async def stop(self) -> None:
         """Stop background processing and close transport."""
