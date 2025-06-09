@@ -7,7 +7,7 @@ from mcp.protocol.base import Notification, ProtocolModel, Request, Result
 
 class Root(ProtocolModel):
     """
-    A root of the server.
+    A root of the client.
     """
 
     uri: Annotated[AnyUrl, UrlConstraints(host_required=False)]
@@ -29,7 +29,7 @@ class Root(ProtocolModel):
 
 class ListRootsRequest(Request):
     """
-    Request to list the roots of the server.
+    Request to list the roots of the client.
     """
 
     method: Literal["roots/list"] = "roots/list"
@@ -37,7 +37,7 @@ class ListRootsRequest(Request):
 
 class ListRootsResult(Result):
     """
-    Response containing the roots of the server.
+    Response containing the roots of the client.
     """
 
     roots: list[Root]
@@ -45,7 +45,7 @@ class ListRootsResult(Result):
 
 class RootsListChangedNotification(Notification):
     """
-    Notification that the roots of the server have changed.
+    Notification that the roots of the client have changed.
     """
 
     method: Literal["notifications/roots/list_changed"] = (
