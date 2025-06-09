@@ -1,31 +1,41 @@
 """Transport layer abstraction for MCP protocol."""
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Any, Self
 from types import TracebackType
 
-import mcp.protocol as protocol
+
+@dataclass
+class TransportMessage:
+    """A message with specific metadata for transport-specific features."""
+
+    payload: dict[str, Any]
+    metadata: dict[str, Any] | None = None
 
 
 class Transport(ABC):
     """Abstract transport for MCP message delivery.
 
-    Handles the mechanics of sending and receiving JSON-RPC messages
+    Handles the mechanics of sending and receiving messages
     without knowledge of protocol semantics or message correlation.
     """
 
     @abstractmethod
-    async def send(self, message: protocol.JSONRPCMessage) -> None:
-        """Send a JSON-RPC message."""
+    async def send(
+        self, payload: dict[str, Any], metadata: dict[str, Any] | None = None
+    ) -> None:
+        """Send a message with any transport-specific metadata."""
 
     @abstractmethod
-    async def receive(self) -> protocol.JSONRPCMessage:
-        """Receive the next JSON-RPC message."""
+    async def receive(self) -> TransportMessage:
+        """Receive the next message with any transport-specific metadata."""
 
     @abstractmethod
     async def close(self) -> None:
         """Close the transport."""
 
-    async def __aenter__(self) -> "Transport":
+    async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(
@@ -35,3 +45,4 @@ class Transport(ABC):
         exc_tb: TracebackType | None,
     ) -> None:
         await self.close()
+        return None
