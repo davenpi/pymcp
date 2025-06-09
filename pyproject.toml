@@ -53,7 +53,6 @@ dev = [
     "ruff>=0.8.5",
     "trio>=0.26.2",
     "pytest-flakefinder>=1.1.0",
-    "pytest-xdist>=3.6.1",
     "pytest-examples>=0.0.14",
     "pytest-pretty>=1.2.0",
     "inline-snapshot>=0.23.0",
@@ -115,7 +114,6 @@ xfail_strict = true
 addopts = """
     --color=yes
     --capture=fd
-    --numprocesses auto
 """
 filterwarnings = [
     "error",
