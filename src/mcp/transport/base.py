@@ -2,8 +2,8 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Self
 from types import TracebackType
+from typing import Any, Self
 
 
 @dataclass
