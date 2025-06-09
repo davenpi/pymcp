@@ -15,7 +15,7 @@ class TestCreateMessageRequest:
             messages=[
                 SamplingMessage(role="user", content=TextContent(text="Hello, world!"))
             ],
-            model_preferences=ModelPreferences(
+            preferences=ModelPreferences(
                 cost_priority=0.5, speed_priority=0.5, intelligence_priority=0.5
             ),
             system_prompt="You are a helpful assistant.",
@@ -66,7 +66,7 @@ class TestCreateMessageRequest:
         original = CreateMessageRequest(
             messages=[SamplingMessage(role="user", content=TextContent(text="Hello"))],
             max_tokens=150,
-            model_preferences=ModelPreferences(hints=["gpt-4"]),
+            preferences=ModelPreferences(hints=["gpt-4"]),
             system_prompt="You are helpful",
             include_context="thisServer",
             temperature=0.7,
@@ -197,7 +197,7 @@ class TestCreateMessageRequest:
             messages=[
                 SamplingMessage(role="user", content=TextContent(text="Hello, world!"))
             ],
-            model_preferences=ModelPreferences(cost_priority=1),
+            preferences=ModelPreferences(cost_priority=1),
             max_tokens=100,
         )
         serialized = request.to_protocol()
@@ -226,7 +226,7 @@ class TestCreateMessageRequest:
                     )
                 ],
                 # Priority must be between 0 and 1
-                model_preferences=ModelPreferences(cost_priority=1.1),
+                preferences=ModelPreferences(cost_priority=1.1),
                 max_tokens=100,
             )
 

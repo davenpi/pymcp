@@ -43,9 +43,7 @@ class CreateMessageRequest(Request):
 
     method: Literal["sampling/createMessage"] = "sampling/createMessage"
     messages: list[SamplingMessage]
-    model_preferences: ModelPreferences | None = Field(
-        default=None, alias="modelPreferences"
-    )
+    preferences: ModelPreferences | None = Field(default=None, alias="modelPreferences")
     system_prompt: str | None = Field(default=None, alias="systemPrompt")
     include_context: Literal["none", "thisServer", "allServers"] | None = Field(
         default=None, alias="includeContext"
