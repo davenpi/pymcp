@@ -109,6 +109,7 @@ members = ["examples/servers/*"]
 mcp = { workspace = true }
 
 [tool.pytest.ini_options]
+asyncio_mode = "auto"
 log_cli = true
 xfail_strict = true
 addopts = """
