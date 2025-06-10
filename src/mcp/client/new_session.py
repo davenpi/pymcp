@@ -41,7 +41,7 @@ class ClientSession:
         await self.transport.close()
 
     async def send_request(
-        self, request: Request, metadata: dict[str, Any] | None = None
+        self, request: Request, transport_metadata: dict[str, Any] | None = None
     ) -> tuple[Any, dict[str, Any] | None]:
         """Send a request and wait for a response."""
         await self.start()  # Auto-start if needed
@@ -57,7 +57,7 @@ class ClientSession:
 
         try:
             # Send via transport
-            await self.transport.send(jsonrpc_request.to_wire(), metadata)
+            await self.transport.send(jsonrpc_request.to_wire(), transport_metadata)
             return await future
         finally:
             self._pending_requests.pop(request_id, None)
@@ -99,16 +99,17 @@ class ClientSession:
         self,
         name: str,
         arguments: dict[str, Any] | None = None,
-        metadata: dict[str, Any] | None = None,
-        return_metadata: bool = False,
+        transport_metadata: dict[str, Any] | None = None,
+        return_transport_metadata: bool = False,
     ) -> CallToolResult | tuple[CallToolResult, dict[str, Any] | None]:
         """Call a tool and return the result.
 
         Args:
             name: Name of the tool to call
             arguments: Arguments to pass to the tool
-            metadata: Metadata to send with the request
-            return_metadata: If True, return (result, transport_metadata) tuple
+            transport_metadata: Metadata to send with the request (auth tokens, etc.)
+            return_transport_metadata: If True, return (result, transport_metadata)
+                tuple.
 
         Returns:
             CallToolResult if return_metadata=False, otherwise tuple of
@@ -119,7 +120,9 @@ class ClientSession:
             status, etc.
         """
         request = CallToolRequest(name=name, arguments=arguments)
-        raw_result, transport_meta = await self.send_request(request, metadata)
+        raw_result, transport_meta = await self.send_request(
+            request, transport_metadata
+        )
         result = CallToolResult.from_protocol(raw_result)
 
-        return (result, transport_meta) if return_metadata else result
+        return (result, transport_meta) if return_transport_metadata else result
