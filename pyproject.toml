@@ -42,7 +42,6 @@ ws = ["websockets>=15.0.1"]
 mcp = "mcp.cli:app [cli]"
 
 [tool.uv]
-resolution = "lowest-direct"
 default-groups = ["dev", "docs"]
 required-version = ">=0.7.2"
 
@@ -56,6 +55,7 @@ dev = [
     "pytest-examples>=0.0.14",
     "pytest-pretty>=1.2.0",
     "inline-snapshot>=0.23.0",
+    "pytest-asyncio>=1.0.0",
 ]
 docs = [
     "mkdocs>=1.6.1",
