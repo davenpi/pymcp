@@ -1,13 +1,13 @@
 import asyncio
 
 import pytest
-from mock_transport import MockTransport
 
 from mcp.client.new_session import ClientSession
 from mcp.protocol import InitializeRequest
 from mcp.protocol.base import PROTOCOL_VERSION
 from mcp.protocol.initialization import Implementation
 from mcp.shared.new_exceptions import MCPError
+from tests.new_client.mock_transport import MockTransport
 
 
 def create_test_request():
@@ -18,6 +18,7 @@ def create_test_request():
     )
 
 
+@pytest.mark.asyncio
 async def test_basic_request_response():
     """Test basic request/response correlation."""
     transport = MockTransport()
@@ -53,6 +54,7 @@ async def test_basic_request_response():
     await session.stop()
 
 
+@pytest.mark.asyncio
 async def test_error_response():
     """Test error handling."""
     transport = MockTransport()
@@ -70,6 +72,7 @@ async def test_error_response():
     await session.stop()
 
 
+@pytest.mark.asyncio
 async def test_simple_correlation():
     """Test basic request/response correlation."""
     transport = MockTransport()
@@ -88,6 +91,7 @@ async def test_simple_correlation():
     await session.stop()
 
 
+@pytest.mark.asyncio
 async def test_wrong_id_ignored():
     """Test that responses with wrong IDs are ignored."""
     transport = MockTransport()
@@ -107,6 +111,7 @@ async def test_wrong_id_ignored():
     await session.stop()
 
 
+@pytest.mark.asyncio
 async def test_request_timeout():
     """Test that requests don't hang forever if no response comes."""
     transport = MockTransport()
@@ -121,6 +126,7 @@ async def test_request_timeout():
     await session.stop()
 
 
+@pytest.mark.asyncio
 async def test_session_lifecycle():
     """Test starting and stopping session."""
     transport = MockTransport()

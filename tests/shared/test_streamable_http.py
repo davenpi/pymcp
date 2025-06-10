@@ -914,9 +914,9 @@ async def test_streamablehttp_client_get_stream(basic_server, basic_server_url):
                     assert str(notif.root.params.uri) == "http://test_resource/"
                     resource_update_found = True
 
-            assert (
-                resource_update_found
-            ), "ResourceUpdatedNotification not received via GET stream"
+            assert resource_update_found, (
+                "ResourceUpdatedNotification not received via GET stream"
+            )
 
 
 @pytest.mark.anyio
