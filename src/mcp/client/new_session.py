@@ -1,7 +1,9 @@
 import asyncio
 from typing import Any
 
-from mcp.protocol import JSONRPCRequest, Request
+from mcp.protocol import CallToolRequest, CallToolResult, JSONRPCRequest, Request
+from mcp.protocol.base import Error
+from mcp.shared.new_exceptions import MCPError
 from mcp.transport.base import Transport, TransportMessage
 
 
@@ -38,7 +40,7 @@ class ClientSession:
             self._task = None
         await self.transport.close()
 
-    async def request(self, request: Request) -> Any:
+    async def send_request(self, request: Request) -> tuple[Any, dict[str, Any] | None]:
         """Send a request and wait for a response."""
         await self.start()  # Auto-start if needed
 
@@ -80,9 +82,40 @@ class ClientSession:
             future = self._pending_requests[message_id]
 
             if "error" in payload:
-                future.set_exception(Exception(f"RPC Error: {payload['error']}"))
+                protocol_error = Error.from_protocol(payload["error"])
+                mcp_error = MCPError(
+                    protocol_error, transport_metadata=message.metadata
+                )
+                future.set_exception(mcp_error)
             elif "result" in payload:
-                future.set_result(payload["result"])
+                future.set_result((payload["result"], message.metadata))
             else:
                 future.set_exception(Exception("Invalid response format"))
         # TODO: Handle server requests and notifications
+
+    async def call_tool(
+        self,
+        name: str,
+        arguments: dict[str, Any] | None = None,
+        return_metadata: bool = False,
+    ) -> CallToolResult | tuple[CallToolResult, dict[str, Any] | None]:
+        """Call a tool and return the result.
+
+        Args:
+            name: Name of the tool to call
+            arguments: Arguments to pass to the tool
+            return_metadata: If True, return (result, transport_metadata) tuple
+
+        Returns:
+            CallToolResult if return_metadata=False, otherwise tuple of
+            (result, metadata)
+
+        Raises:
+            MCPError: If the tool call fails. Check .transport_metadata for HTTP
+            status, etc.
+        """
+        request = CallToolRequest(name=name, arguments=arguments)
+        raw_result, transport_meta = await self.send_request(request)
+        result = CallToolResult.from_protocol(raw_result)
+
+        return (result, transport_meta) if return_metadata else result

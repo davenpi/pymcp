@@ -7,6 +7,7 @@ from mcp.client.new_session import ClientSession
 from mcp.protocol import InitializeRequest
 from mcp.protocol.base import PROTOCOL_VERSION
 from mcp.protocol.initialization import Implementation
+from mcp.shared.new_exceptions import MCPError
 
 
 def create_test_request():
@@ -35,7 +36,7 @@ async def test_basic_request_response():
     # Make the request
     request = create_test_request()
 
-    result = await session.request(request)
+    result, _ = await session.send_request(request)
 
     # Verify the request was sent correctly
     assert len(transport.sent_messages) == 1
@@ -63,8 +64,8 @@ async def test_error_response():
 
     request = create_test_request()
 
-    with pytest.raises(Exception, match="RPC Error"):
-        await session.request(request)
+    with pytest.raises(MCPError, match="Invalid Request"):
+        await session.send_request(request)
 
     await session.stop()
 
@@ -80,7 +81,7 @@ async def test_simple_correlation():
     transport.queue_response(request_id=0, result="my_result")
 
     # Make ONE request
-    result = await session.request(req)
+    result, _ = await session.send_request(req)
 
     # Verify it worked
     assert result == "my_result"
@@ -101,7 +102,7 @@ async def test_wrong_id_ignored():
     transport.queue_response(request_id=0, result="correct")
 
     # Make request - should get "correct", not "wrong"
-    result = await session.request(req)
+    result, _ = await session.send_request(req)
     assert result == "correct"
     await session.stop()
 
@@ -115,7 +116,7 @@ async def test_request_timeout():
     request = create_test_request()
 
     with pytest.raises(asyncio.TimeoutError):
-        await asyncio.wait_for(session.request(request), timeout=0.1)
+        await asyncio.wait_for(session.send_request(request), timeout=0.1)
 
     await session.stop()
 
@@ -129,7 +130,7 @@ async def test_session_lifecycle():
     assert not session._running
 
     transport.queue_response(request_id=0, result="test")
-    await session.request(create_test_request())
+    _, _ = await session.send_request(create_test_request())
 
     assert session._running
 
