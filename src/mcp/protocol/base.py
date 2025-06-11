@@ -1,5 +1,5 @@
 import traceback
-from typing import Annotated, Any, Literal, TypeVar
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import (
     BaseModel,
@@ -20,11 +20,6 @@ Role = Annotated[
     Literal["user", "assistant"],
     "Sender or recipient of messages and data in a conversation.",
 ]
-
-
-RequestT = TypeVar("RequestT", bound="Request")
-NotificationT = TypeVar("NotificationT", bound="Notification")
-ResultT = TypeVar("ResultT", bound="Result")
 
 
 class ProtocolModel(BaseModel):
@@ -65,7 +60,7 @@ class Request(ProtocolModel):
         return metadata
 
     @classmethod
-    def from_protocol(cls: type[RequestT], data: dict[str, Any]) -> RequestT:
+    def from_protocol(cls, data: dict[str, Any]) -> Self:
         """Convert from protocol-level representation."""
 
         # Extract protocol structure
@@ -149,7 +144,7 @@ class Notification(ProtocolModel):
     """
 
     @classmethod
-    def from_protocol(cls: type[NotificationT], data: dict[str, Any]) -> NotificationT:
+    def from_protocol(cls, data: dict[str, Any]) -> Self:
         """Convert from protocol-level representation"""
 
         # Extract params
@@ -210,7 +205,7 @@ class Result(ProtocolModel):
     """
 
     @classmethod
-    def from_protocol(cls: type[ResultT], data: dict[str, Any]) -> ResultT:
+    def from_protocol(cls, data: dict[str, Any]) -> Self:
         """Convert from protocol-level representation."""
 
         # Extract metadata
