@@ -1,28 +1,61 @@
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from mcp.protocol import CallToolRequest, CallToolResult, JSONRPCRequest, Request
-from mcp.protocol.base import Error
+from mcp.protocol.base import (
+    INTERNAL_ERROR,
+    INVALID_REQUEST,
+    Error,
+    Result,
+)
+from mcp.protocol.common import EmptyResult, PingRequest
+from mcp.protocol.initialization import ClientCapabilities, Implementation
 from mcp.protocol.jsonrpc import JSONRPCError, JSONRPCResponse
+from mcp.protocol.roots import ListRootsRequest, ListRootsResult, Root
+from mcp.protocol.sampling import CreateMessageRequest, CreateMessageResult
 from mcp.shared.new_exceptions import MCPError
 from mcp.transport.base import Transport, TransportMessage
 
 
 class ClientSession:
     """
-    MCP client session.
+    MCP client session handling request/response over a transport.
 
-    Handles request/response correlation and protocol logic over a trasnport.
+    Manages the full MCP lifecycle:
+    - Automatic initialization handshake
+    - Request/response correlation using futures
+    - Capability-based request routing
     """
 
-    def __init__(self, transport: Transport):
+    def __init__(
+        self,
+        transport: Transport,
+        client_info: Implementation,
+        capabilities: ClientCapabilities,
+        create_message_handler: Callable[
+            [CreateMessageRequest], Awaitable[CreateMessageResult]
+        ]
+        | None = None,
+        roots: list[Root] | None = None,
+    ):
         self.transport = transport
+        self.client_info = client_info
+        self.capabilities = capabilities
+
+        if capabilities.sampling and create_message_handler is None:
+            raise ValueError(
+                "create_message_handler required when sampling capability is enabled."
+                " Either provide a handler or disable sampling in ClientCapabilities."
+            )
+        self.create_message_handler = create_message_handler
+
+        self.roots = roots or []  # TODO: Hook this up to notifcations.
+
         self._request_id = 0
         self._pending_requests: dict[int, asyncio.Future[Any]] = {}
         self._task: asyncio.Task[None] | None = None
         self._running = False
-        self._request_handlers: dict[str, Callable[[dict[str, Any]], Any]] = {}
 
     async def start(self) -> None:
         """Start the session message loop."""
@@ -46,42 +79,48 @@ class ClientSession:
     async def send_request(
         self, request: Request, transport_metadata: dict[str, Any] | None = None
     ) -> tuple[Any, dict[str, Any] | None]:
-        """Send a request and wait for a response."""
-        await self.start()  # Auto-start if needed
+        """Send a request and wait for a response.
+
+        Remove the request from the pending requests dictionary when the response is
+        received.
+
+        Args:
+            request: The request to send
+            transport_metadata: Transport specific metadata to send with the request
+                (auth tokens, etc.)
+
+        Returns:
+            tuple[Any, dict[str, Any] | None]: The result and transport metadata.
+                (result, transport_metadata).
+        """
+        await self.start()  # Auto-start if needed.
 
         # Generate request ID and create JSON-RPC wrapper
         request_id = self._request_id
         self._request_id += 1
         jsonrpc_request = JSONRPCRequest.from_request(request, request_id)
 
-        # Set up response waiting
+        # Set up response waiting. Future is set in the message loop.
         future: asyncio.Future[Any] = asyncio.Future()
         self._pending_requests[request_id] = future
 
         try:
-            # Send via transport
             await self.transport.send(jsonrpc_request.to_wire(), transport_metadata)
             return await future
         finally:
             self._pending_requests.pop(request_id, None)
 
-    def register_handler(
-        self, method: str, handler: Callable[[dict[str, Any]], Any]
-    ) -> None:
-        """Register a handler for a server->client requests."""
-        self._request_handlers[method] = handler
-
     async def _message_loop(self) -> None:
         """Background task: process incoming messages."""
         try:
             while self._running:
-                print("Message loop: waiting for message...")
                 message = await self.transport.receive()
-                print(f"Message loop: received {message.payload}")
                 await self._handle_message(message)
-                print("Message loop: handled message")
-        except Exception as e:
-            print(f"Message loop exception: {e}")
+        except MCPError as e:
+            # TODO: Handle MCPError.
+            print("MCPError", e)
+            pass
+        except Exception:
             self._running = False
             # Cancel pending requests
             for future in self._pending_requests.values():
@@ -92,10 +131,8 @@ class ClientSession:
         """Handle incoming message from transport."""
         payload = message.payload
         message_id = payload.get("id")
-        print(f"Handling message: id={message_id}, payload={payload}")
 
         if message_id is not None and message_id in self._pending_requests:
-            print(f"Found pending request for id {message_id}")
             future = self._pending_requests[message_id]
 
             if "error" in payload:
@@ -108,53 +145,73 @@ class ClientSession:
                 future.set_result((payload["result"], message.metadata))
             else:
                 future.set_exception(Exception("Invalid response format"))
+
         elif "method" in payload and message_id is not None:
-            print(f"Server request: {payload.get('method')}")
-            await self._handle_server_request(message)
-        elif "method" in payload and message_id is None:
-            print(f"Server notification: {payload.get('method')}")
-            await self._handle_notification(message)
-        else:
-            print(f"Unknown message type, ignoring: {payload}")
-            pass
-
-    async def _handle_notification(self, message: TransportMessage) -> None:
-        """Handle notifications from server (no response needed)."""
-        payload = message.payload
-        method = payload["method"]
-
-        if method in self._request_handlers:
             try:
-                await self._request_handlers[method](payload.get("params", {}))
-            except Exception:
-                # Log the error but don't send a response (it's a notification)
-                pass
-        # Silently ignore unknown notifications
-
-    async def _handle_server_request(self, message: TransportMessage) -> None:
-        """Handle incoming requests from server."""
-        payload = message.payload
-        method = payload["method"]
-        request_id = payload["id"]
-
-        if method in self._request_handlers:
-            try:
-                # Call the handler
-                result = await self._request_handlers[method](payload.get("params", {}))
-
-                # Send success response
-                response = JSONRPCResponse.from_result(result, request_id)
+                request = self._parse_request(payload)
+                result_or_error = await self._route_request(request)
+                if isinstance(result_or_error, Result):
+                    response = JSONRPCResponse.from_result(result_or_error, message_id)
+                else:
+                    response = JSONRPCError.from_error(result_or_error, message_id)
                 await self.transport.send(response.to_wire(), message.metadata)
             except Exception as e:
-                # Send error response
-                error = Error(code=-32603, message=str(e))
-                error_response = JSONRPCError.from_error(error, request_id)
+                error = Error(code=INTERNAL_ERROR, message=str(e))
+                error_response = JSONRPCError.from_error(error, message_id)
                 await self.transport.send(error_response.to_wire(), message.metadata)
+
+        elif "method" in payload and message_id is None:
+            pass
         else:
-            # Method not found
-            error = Error(code=-32601, message=f"Method not found: {method}")
-            error_response = JSONRPCError.from_error(error, request_id)
-            await self.transport.send(error_response.to_wire(), message.metadata)
+            pass  # TODO: Handle unknown message types.
+
+    def _parse_request(self, payload: dict[str, Any]) -> Request:
+        """Parse JSON-RPC payload into typed request objects.
+
+        Validates method name and delegates to appropriate Request subclass. This
+        ensures type safety throughout the request handling process.
+        """
+        method = payload["method"]
+        if method == "sampling/createMessage":
+            return CreateMessageRequest.from_protocol(payload.get("params", {}))
+        else:
+            raise Exception(f"Unknown method: {method}")
+
+    async def _route_request(self, request: Request) -> Result | Error:
+        """Route typed request to appropriate handler based on capabilities.
+
+        If the request type isn't supported by declared capabilities or if the
+        required handler is not configured, return an Error.
+
+        Returns:
+            Result if the request was handled successfully. Otherwise Error.
+        """
+        if isinstance(request, CreateMessageRequest):
+            if not self.capabilities.sampling:
+                return Error(
+                    code=INVALID_REQUEST, message="Sampling capability not supported"
+                )
+            if self.create_message_handler is None:
+                return Error(
+                    code=INTERNAL_ERROR, message="No create_message_handler configured"
+                )
+            return await self.create_message_handler(request)
+
+        elif isinstance(request, ListRootsRequest):
+            if not self.capabilities.roots:
+                return Error(
+                    code=INVALID_REQUEST, message="Roots capability not supported"
+                )
+            return ListRootsResult(roots=self.roots)
+
+        elif isinstance(request, PingRequest):
+            return EmptyResult()
+
+        else:
+            return Error(
+                code=INVALID_REQUEST,
+                message=f"Unknown request type: {type(request).__name__}",
+            )
 
     async def call_tool(
         self,

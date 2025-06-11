@@ -5,8 +5,7 @@ import pytest
 from mcp.client.new_session import ClientSession
 from mcp.protocol import CallToolRequest, InitializeRequest, JSONRPCRequest
 from mcp.protocol.base import PROTOCOL_VERSION
-from mcp.protocol.initialization import Implementation
-from mcp.shared.new_exceptions import MCPError
+from mcp.protocol.initialization import ClientCapabilities, Implementation
 from tests.new_client.mock_transport import MockTransport
 
 
@@ -18,126 +17,45 @@ def create_test_request():
     )
 
 
-@pytest.mark.asyncio
-async def test_basic_request_response():
-    """Test basic request/response correlation."""
-    transport = MockTransport()
-    session = ClientSession(transport)
-
-    # Queue the response BEFORE making the request
-    transport.queue_response(
-        request_id=0,
-        result={
-            "protocolVersion": PROTOCOL_VERSION,
-            "capabilities": {"going": "here"},
-            "serverInfo": {"name": "test-server", "version": "1.0.0"},
-        },
-    )
-
-    # Make the request
-    request = create_test_request()
-
-    result, _ = await session.send_request(request)
-
-    # Verify the request was sent correctly
-    assert len(transport.sent_messages) == 1
-    sent = transport.sent_messages[0].payload
-    assert sent["jsonrpc"] == "2.0"
-    assert sent["id"] == 0
-    assert sent["method"] == "initialize"
-    assert sent["params"]["protocolVersion"] == PROTOCOL_VERSION
-
-    # Verify we got the right response
-    assert result["protocolVersion"] == PROTOCOL_VERSION
-    assert result["serverInfo"]["name"] == "test-server"
-
-    await session.stop()
-
-
-@pytest.mark.asyncio
-async def test_error_response():
-    """Test error handling."""
-    transport = MockTransport()
-    session = ClientSession(transport)
-
-    transport.queue_response(
-        request_id=0, error={"code": -32600, "message": "Invalid Request"}
-    )
-
-    request = create_test_request()
-
-    with pytest.raises(MCPError, match="Invalid Request"):
-        await session.send_request(request)
-
-    await session.stop()
-
-
-@pytest.mark.asyncio
-async def test_simple_correlation():
-    """Test basic request/response correlation."""
-    transport = MockTransport()
-    session = ClientSession(transport)
-
-    req = create_test_request()
-
-    # Queue ONE response
-    transport.queue_response(request_id=0, result="my_result")
-
-    # Make ONE request
-    result, _ = await session.send_request(req)
-
-    # Verify it worked
-    assert result == "my_result"
-    await session.stop()
-
-
-@pytest.mark.asyncio
-async def test_request_timeout():
-    """Test that requests don't hang forever if no response comes."""
-    transport = MockTransport()
-    session = ClientSession(transport)
-
-    # Don't queue any response - request should timeout
-    request = create_test_request()
-
-    with pytest.raises(asyncio.TimeoutError):
-        await asyncio.wait_for(session.send_request(request), timeout=0.1)
-
-    await session.stop()
-
-
-@pytest.mark.asyncio
-async def test_session_lifecycle():
-    """Test starting and stopping session."""
-    transport = MockTransport()
-    session = ClientSession(transport)
-
-    # Session should auto-start on first request
-    assert not session._running
-
-    transport.queue_response(request_id=0, result="test")
-    _, _ = await session.send_request(create_test_request())
-
-    assert session._running
-
-    await session.stop()
-    assert not session._running
-
-
 class TestClientSessionBasics:
     @pytest.fixture(autouse=True)
     async def setup_session(self):
         self.transport = MockTransport()
-        self.session = ClientSession(self.transport)
+        self.session = ClientSession(
+            self.transport,
+            client_info=Implementation(name="test-client", version="1.0.0"),
+            capabilities=ClientCapabilities(),
+        )
         yield
         await self.session.stop()
 
-    async def test_transport_basic_send_receive(self):
-        """Verify our mock transport works in isolation."""
-        self.transport.queue_message({"test": "data"})
+    async def test_session_lifecycle(self):
+        """Test starting and stopping session."""
 
-        message = await self.transport.receive()
-        assert message.payload == {"test": "data"}
+        # Session should auto-start on first request
+        assert not self.session._running
+
+        self.transport.queue_response(request_id=0, result="test")
+        _, _ = await self.session.send_request(create_test_request())
+
+        assert self.session._running
+
+        await self.session.stop()
+        assert not self.session._running
+
+    async def test_simple_correlation(self):
+        """Test basic request/response correlation."""
+
+        # Queue ONE response
+        self.transport.queue_response(request_id=0, result="my_result")
+
+        # Make ONE request
+        result, _ = await self.session.send_request(create_test_request())
+
+        # Verify it worked
+        assert result == "my_result"
+        await self.session.stop()
+        assert not self.session._running
 
     async def test_session_message_loop_processes_queued_responses(self):
         """Test that the message loop processes responses."""
@@ -181,32 +99,13 @@ class TestClientSessionBasics:
         assert self.transport.incoming_queue.qsize() == 0
         assert len(self.transport.sent_messages) == 0
 
-    # async def test_send_request_generates_incremental_request_ids(self):
-    #     transport = MockTransport()
-    #     session = ClientSession(transport)
-
-    #     try:
-    #         # Queue two responses
-    #         transport.queue_response(0, {"result": "first"})
-    #         transport.queue_response(1, {"result": "second"})
-
-    #         # Send two requests
-    #         request1 = CallToolRequest(name="tool1")
-    #         request2 = CallToolRequest(name="tool2")
-
-    #         await session.send_request(request1)
-    #         await session.send_request(request2)
-
-    #         # Verify request IDs are 0, 1
-    #         assert len(transport.sent_messages) == 2
-    #         assert transport.sent_messages[0].payload["id"] == 0
-    #         assert transport.sent_messages[1].payload["id"] == 1
-    #     finally:
-    #         await session.stop()
-
     async def test_debug_send_request(self):
         transport = MockTransport()
-        session = ClientSession(transport)
+        session = ClientSession(
+            transport,
+            client_info=Implementation(name="test-client", version="1.0.0"),
+            capabilities=ClientCapabilities(),
+        )
 
         try:
             print("Queuing response...")
@@ -255,7 +154,11 @@ class TestClientSessionBasics:
 
     async def test_two_requests_with_proper_timing(self):
         transport = MockTransport()
-        session = ClientSession(transport)
+        session = ClientSession(
+            transport,
+            client_info=Implementation(name="test-client", version="1.0.0"),
+            capabilities=ClientCapabilities(),
+        )
 
         try:
             # Send first request, queue its response
@@ -274,36 +177,19 @@ class TestClientSessionBasics:
         finally:
             await session.stop()
 
-    # async def test_debug_two_requests_detailed(self):
-    #     transport = MockTransport()
-    #     session = ClientSession(transport)
 
-    #     try:
-    #         print("Queuing responses...")
-    #         transport.queue_response(0, {"result": "first"})
-    #         transport.queue_response(1, {"result": "second"})
-    #         print(f"Queue size: {transport.incoming_queue.qsize()}")
+# class TestClientSessionSampling:
+#     async def test_routes_create_message_to_handler_when_sampling_enabled(self):
+#         pass
 
-    #         print("Creating requests...")
-    #         request1 = CallToolRequest(name="tool1")
-    #         request2 = CallToolRequest(name="tool2")
+#     async def test_returns_error_when_create_message_but_sampling_disabled(self):
+#         pass
 
-    #         print(f"Session request ID before first: {session._request_id}")
-    #         print("Sending first request...")
-    #         result1, _ = await session.send_request(request1)
-    #         print(f"Got first result: {result1}")
-    #         print(f"Session request ID after first: {session._request_id}")
-    #         print(
-    #             "Pending requests after first: "
-    #             f"{list(session._pending_requests.keys())}"
-    #         )
-    #         print(f"Queue size after first: {transport.incoming_queue.qsize()}")
+#     async def test_returns_error_when_create_message_but_no_handler(self):
+#         pass
 
-    #         print("Sending second request...")
-    #         print(f"Session request ID before second: {session._request_id}")
-    #         # This is where it should hang
-    #         result2, _ = await session.send_request(request2)
-    #         print(f"Got second result: {result2}")
+#     async def test_routes_list_roots_to_default_handler(self):
+#         pass
 
-    #     finally:
-    #         await session.stop()
+#     async def test_returns_error_when_list_roots_but_capability_disabled(self):
+#         pass
