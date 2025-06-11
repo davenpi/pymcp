@@ -107,8 +107,6 @@ class TestClientSessionRequestResponse:
             }
         )
 
-        await asyncio.sleep(0.1)
-
         # Loop should still be running
         assert self.session._running is True
 
@@ -125,9 +123,6 @@ class TestClientSessionRequestResponse:
         # Start both requests (don't await yet)
         task1 = asyncio.create_task(self.session.send_request(request1))
         task2 = asyncio.create_task(self.session.send_request(request2))
-
-        # Give them time to set up pending requests
-        await asyncio.sleep(0.01)
 
         # Now queue responses in reverse order
         self.transport.queue_response(1, {"result": "second"})
