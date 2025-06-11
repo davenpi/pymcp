@@ -6,12 +6,19 @@ from mcp.protocol import CallToolRequest, CallToolResult, JSONRPCRequest, Reques
 from mcp.protocol.base import (
     INTERNAL_ERROR,
     INVALID_REQUEST,
+    PROTOCOL_VERSION,
     Error,
     Result,
 )
 from mcp.protocol.common import EmptyResult, PingRequest
-from mcp.protocol.initialization import ClientCapabilities, Implementation
-from mcp.protocol.jsonrpc import JSONRPCError, JSONRPCResponse
+from mcp.protocol.initialization import (
+    ClientCapabilities,
+    Implementation,
+    InitializedNotification,
+    InitializeRequest,
+    InitializeResult,
+)
+from mcp.protocol.jsonrpc import JSONRPCError, JSONRPCNotification, JSONRPCResponse
 from mcp.protocol.roots import ListRootsRequest, ListRootsResult, Root
 from mcp.protocol.sampling import CreateMessageRequest, CreateMessageResult
 from mcp.shared.new_exceptions import MCPError
@@ -51,6 +58,9 @@ class ClientSession:
         self._pending_requests: dict[int, asyncio.Future[Any]] = {}
         self._task: asyncio.Task[None] | None = None
         self._running = False
+        self._initializing: asyncio.Future[InitializeResult] | None = None
+        self._initialize_result: InitializeResult | None = None
+        self._initialized = False
 
     async def start(self) -> None:
         """Start the session message loop."""
@@ -71,6 +81,78 @@ class ClientSession:
             self._task = None
         await self.transport.close()
 
+    async def initialize(
+        self, transport_metadata: dict[str, Any] | None = None
+    ) -> InitializeResult:
+        if self._initialized and self._initialize_result is not None:
+            return self._initialize_result
+
+        if self._initializing:
+            return await self._initializing
+
+        self._initializing = asyncio.create_task(
+            self._do_initialize(transport_metadata)
+        )
+        try:
+            result = await self._initializing
+            return result
+        finally:
+            self._initializing = None
+
+    async def _ensure_initialized(self) -> None:
+        if self._initialized:
+            return
+
+        if self._initializing:
+            await self._initializing
+            return
+
+        await self.initialize()
+
+    def _validate_server(self, init_result: InitializeResult) -> None:
+        if init_result.protocol_version != PROTOCOL_VERSION:
+            raise ValueError(
+                f"Protocol version mismatch: client version {PROTOCOL_VERSION} !="
+                f" server version {init_result.protocol_version}"
+            )
+
+    async def _do_initialize(
+        self, transport_metadata: dict[str, Any] | None = None
+    ) -> InitializeResult:
+        await self.start()
+        init_request = InitializeRequest(
+            client_info=self.client_info,  # type: ignore[call-arg]
+            capabilities=self.capabilities,
+        )
+        request_id = self._request_id
+        self._request_id += 1
+        jsonrpc_request = JSONRPCRequest.from_request(init_request, request_id)
+
+        # Set up response waiting.
+        future: asyncio.Future[Any] = asyncio.Future()
+        self._pending_requests[request_id] = future
+
+        try:
+            await self.transport.send(jsonrpc_request.to_wire(), transport_metadata)
+            result_data, _ = await future
+            init_result = InitializeResult.from_protocol(result_data)
+
+            self._validate_server(init_result)
+
+            initialized_notification = InitializedNotification()
+            jsonrpc_notification = JSONRPCNotification.from_notification(
+                initialized_notification
+            )
+            await self.transport.send(
+                jsonrpc_notification.to_wire(), transport_metadata
+            )
+
+            self._initialized = True
+            self._initialize_result = init_result
+            return init_result
+        finally:
+            self._pending_requests.pop(request_id, None)
+
     async def send_request(
         self, request: Request, transport_metadata: dict[str, Any] | None = None
     ) -> tuple[Any, dict[str, Any] | None]:
@@ -88,7 +170,7 @@ class ClientSession:
             tuple[Any, dict[str, Any] | None]: The result and transport metadata.
                 (result, transport_metadata).
         """
-        await self.start()  # Auto-start if needed.
+        await self._ensure_initialized()
 
         # Generate request ID and create JSON-RPC wrapper
         request_id = self._request_id

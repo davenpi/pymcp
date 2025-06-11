@@ -17,7 +17,7 @@ from mcp.protocol.initialization import (
 class TestInitialization:
     def test_initialize_request_roundtrip(self):
         request = InitializeRequest(
-            clientInfo=Implementation(name="Test client", version="1"),
+            client_info=Implementation(name="Test client", version="1"),
             capabilities=ClientCapabilities(),
             protocol_version=PROTOCOL_VERSION,
         )
@@ -28,7 +28,7 @@ class TestInitialization:
 
     def test_initialize_request_serializes_bool_sampling_as_dict(self):
         request = InitializeRequest(
-            clientInfo=Implementation(name="Test client", version="1"),
+            client_info=Implementation(name="Test client", version="1"),
             capabilities=ClientCapabilities(sampling=True),
             protocol_version=PROTOCOL_VERSION,
         )
@@ -49,7 +49,7 @@ class TestInitialization:
 
     def test_initialize_request_no_sampling_serializes_as_empty_dict(self):
         request = InitializeRequest(
-            clientInfo=Implementation(name="Test client", version="1"),
+            client_info=Implementation(name="Test client", version="1"),
             capabilities=ClientCapabilities(roots=RootsCapability(list_changed=True)),
             protocol_version=PROTOCOL_VERSION,
         )
