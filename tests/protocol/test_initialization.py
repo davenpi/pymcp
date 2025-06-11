@@ -9,6 +9,7 @@ from mcp.protocol.initialization import (
     InitializedNotification,
     InitializeRequest,
     InitializeResult,
+    RootsCapability,
     ServerCapabilities,
 )
 
@@ -24,6 +25,36 @@ class TestInitialization:
         reconstructed = InitializeRequest.from_protocol(protocol_data)
         assert reconstructed == request
         assert reconstructed.client_info.name == "Test client"
+
+    def test_initialize_request_serializes_bool_sampling_as_dict(self):
+        request = InitializeRequest(
+            clientInfo=Implementation(name="Test client", version="1"),
+            capabilities=ClientCapabilities(sampling=True),
+            protocol_version=PROTOCOL_VERSION,
+        )
+        serialized = request.to_protocol()
+        assert serialized["params"]["capabilities"]["sampling"] == {}
+
+    def test_initialize_from_protocol_deserializes_dict_sampling_as_bool(self):
+        protocol_data = {
+            "method": "initialize",
+            "params": {
+                "protocolVersion": PROTOCOL_VERSION,
+                "clientInfo": {"name": "Test client", "version": "1"},
+                "capabilities": {"sampling": {}},
+            },
+        }
+        request = InitializeRequest.from_protocol(protocol_data)
+        assert request.capabilities.sampling
+
+    def test_initialize_request_no_sampling_serializes_as_empty_dict(self):
+        request = InitializeRequest(
+            clientInfo=Implementation(name="Test client", version="1"),
+            capabilities=ClientCapabilities(roots=RootsCapability(list_changed=True)),
+            protocol_version=PROTOCOL_VERSION,
+        )
+        serialized = request.to_protocol()
+        assert "sampling" not in serialized["params"]["capabilities"]
 
     def test_initialized_notification_roundtrip(self):
         notif = InitializedNotification()

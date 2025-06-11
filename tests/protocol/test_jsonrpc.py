@@ -42,6 +42,7 @@ class TestJSONRPCSerializing:
                 "capabilities": {},
             },
         }
+        print("wire_data", wire_data)
         assert wire_data == expected_data
 
     def test_serializes_with_cursor_for_pagination(self):

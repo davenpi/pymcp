@@ -1,4 +1,5 @@
-from typing import Any, Literal
+import copy
+from typing import Any, Literal, Self
 
 from pydantic import Field
 
@@ -38,7 +39,7 @@ class ClientCapabilities(ProtocolModel):
     Filesystem roots listing and monitoring.
     """
 
-    sampling: dict[str, Any] | None = None
+    sampling: bool = False
     """
     LLM sampling support from the host.
     """
@@ -129,6 +130,43 @@ class InitializeRequest(Request):
     """
     Capabilities the client supports.
     """
+
+    @classmethod
+    def from_protocol(cls, data: dict[str, Any]) -> Self:
+        """Convert from protocol-level representation.
+
+        Note: Deviates from MCP spec for better usability. The spec defines sampling
+        as dict[str, Any] | None, but we convert any non-null value to True since
+        sampling has no sub-options. This makes capability checking cleaner. Run
+        `if capabilities.sampling` instead of `if capabilities.sampling is not None`.
+
+        - Wire format: {"capabilities": {"sampling": {}}}
+        - Python API:  {"capabilities": {"sampling": True}} (or False)
+        """
+        data = copy.deepcopy(data)
+        if "params" in data and "capabilities" in data["params"]:
+            capabilities = data["params"]["capabilities"]
+            if "sampling" in capabilities:
+                capabilities["sampling"] = True
+
+        return super().from_protocol(data)
+
+    def to_protocol(self) -> dict[str, Any]:
+        """Convert to protocol-level representation.
+
+        Converts our boolean sampling capability back to the spec format:
+        - sampling=True becomes {"sampling": {}}
+        - sampling=False omits the sampling field entirely
+
+        This ensures wire compatibility while maintaining clean Python APIs.
+        """
+        result = super().to_protocol()
+        params = result["params"]
+        if self.capabilities.sampling:
+            params["capabilities"]["sampling"] = {}
+        else:
+            del params["capabilities"]["sampling"]
+        return result
 
 
 class InitializedNotification(Notification):
