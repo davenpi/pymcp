@@ -1,8 +1,10 @@
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
 
 from mcp.client.new_session import ClientSession
+from mcp.protocol.common import PingRequest
 from mcp.protocol.initialization import ClientCapabilities, Implementation
 from tests.new_client.mock_transport import MockTransport
 
@@ -62,3 +64,80 @@ class TestClientLifecycle:
         self.transport.close = close_mock
         await self.session.stop()
         close_mock.assert_awaited_once()
+
+
+class TestClientSessionRequestResponse:
+    @pytest.fixture(autouse=True)
+    def setup_fixtures(self):
+        self.transport = MockTransport()
+        self.session = ClientSession(
+            self.transport,
+            client_info=Implementation(name="test-client", version="1.0.0"),
+            capabilities=ClientCapabilities(),
+        )
+
+    async def test_response_with_unknown_id_doesnt_hang(self):
+        await self.session.start()
+
+        # Queue a response for a request that was never sent
+        self.transport.queue_response(request_id=999, result={"data": "orphaned"})
+
+        # Queue a second message to prove the loop is still processing
+        self.transport.queue_message({"test": "marker"})
+
+        # Give the message loop time to process both messages
+        await asyncio.sleep(0.1)
+
+        # The loop should still be running (not hung)
+        assert self.session._running is True
+        assert not self.session._task.done()
+
+        await self.session.stop()
+
+    async def test_malformed_response_doesnt_crash_message_loop(self):
+        """Malformed response should not crash the message loop."""
+        await self.session.start()
+
+        # Queue a response missing both result and error
+        self.transport.queue_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 123,
+                # Missing "result" or "error"
+            }
+        )
+
+        await asyncio.sleep(0.1)
+
+        # Loop should still be running
+        assert self.session._running is True
+
+        await self.session.stop()
+
+    async def test_concurrent_requests_out_of_order_responses(self):
+        """Test that out-of-order responses correlate correctly."""
+        self.session._initialized = True
+
+        # Send both requests first
+        request1 = PingRequest()
+        request2 = PingRequest()
+
+        # Start both requests (don't await yet)
+        task1 = asyncio.create_task(self.session.send_request(request1))
+        task2 = asyncio.create_task(self.session.send_request(request2))
+
+        # Give them time to set up pending requests
+        await asyncio.sleep(0.01)
+
+        # Now queue responses in reverse order
+        self.transport.queue_response(1, {"result": "second"})
+        self.transport.queue_response(0, {"result": "first"})
+
+        # Both should complete correctly despite reverse order
+        result1, _ = await task1
+        result2, _ = await task2
+
+        assert result1 == {"result": "first"}
+        assert result2 == {"result": "second"}
+
+        await self.session.stop()

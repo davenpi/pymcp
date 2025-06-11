@@ -56,6 +56,7 @@ class ClientSession:
 
         self._request_id = 0
         self._pending_requests: dict[int, asyncio.Future[Any]] = {}
+        self._buffered_responses: dict[int, tuple[Any, dict[str, Any] | None]] = {}
         self._task: asyncio.Task[None] | None = None
         self._running = False
         self._initializing: asyncio.Future[InitializeResult] | None = None
@@ -170,6 +171,7 @@ class ClientSession:
             tuple[Any, dict[str, Any] | None]: The result and transport metadata.
                 (result, transport_metadata).
         """
+        await self.start()
         await self._ensure_initialized()
 
         # Generate request ID and create JSON-RPC wrapper
@@ -177,7 +179,6 @@ class ClientSession:
         self._request_id += 1
         jsonrpc_request = JSONRPCRequest.from_request(request, request_id)
 
-        # Set up response waiting. Future is set in the message loop.
         future: asyncio.Future[Any] = asyncio.Future()
         self._pending_requests[request_id] = future
 
@@ -222,6 +223,13 @@ class ClientSession:
                 future.set_result((payload["result"], message.metadata))
             else:
                 future.set_exception(Exception("Invalid response format"))
+
+        elif message_id is not None and ("result" in payload or "error" in payload):
+            # Buffer unmatched response for a short time
+            self._buffered_responses[message_id] = (payload, message.metadata)
+            print(f"Buffered unmatched response for request ID {message_id}")
+            # Optional: Log unexpected response for debugging
+            # logger.debug(f"Buffered unmatched response for request ID {message_id}")
 
         elif "method" in payload and message_id is not None:
             try:
