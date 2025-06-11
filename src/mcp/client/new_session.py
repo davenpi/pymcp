@@ -21,11 +21,6 @@ from mcp.transport.base import Transport, TransportMessage
 class ClientSession:
     """
     MCP client session handling request/response over a transport.
-
-    Manages the full MCP lifecycle:
-    - Automatic initialization handshake
-    - Request/response correlation using futures
-    - Capability-based request routing
     """
 
     def __init__(
