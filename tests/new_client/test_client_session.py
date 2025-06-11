@@ -1,16 +1,13 @@
-import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
 
 from mcp.client.new_session import ClientSession
-from mcp.protocol import CallToolRequest, InitializeRequest, JSONRPCRequest
-from mcp.protocol.base import PROTOCOL_VERSION
 from mcp.protocol.initialization import ClientCapabilities, Implementation
 from tests.new_client.mock_transport import MockTransport
 
 
-class TestClientSessionLifecycle:
+class TestClientLifecycle:
     @pytest.fixture(autouse=True)
     def setup_fixtures(self):
         self.transport = MockTransport()
