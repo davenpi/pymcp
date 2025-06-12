@@ -6,6 +6,8 @@ import pytest
 from mcp.client.new_session import ClientSession
 from mcp.protocol.common import CancelledNotification, PingRequest
 from mcp.protocol.initialization import ClientCapabilities, Implementation
+from mcp.protocol.logging import LoggingMessageNotification
+from mcp.shared.new_exceptions import MCPError
 from tests.new_client.mock_transport import MockTransport
 
 
@@ -106,9 +108,6 @@ class TestClientSessionRequestResponse:
         # Queue a second message to prove the loop is still processing
         self.transport.queue_message({"test": "marker"})
 
-        # Give the message loop time to process both messages
-        await asyncio.sleep(0.1)
-
         # The loop should still be running (not hung)
         assert self.session._running is True
         assert not self.session._task.done()
@@ -195,6 +194,54 @@ class TestClientSessionRequestResponse:
 
         await self.session.stop()
 
+    async def test_notification_handler_parses_and_queues_notification(self):
+        self.session._initialized = True
+
+        # Send a logging notification
+        notification_payload = {
+            "jsonrpc": "2.0",
+            "method": "notifications/message",
+            "params": {"level": "info", "data": {"message": "test log"}},
+        }
+        self.transport.queue_message(notification_payload)
+
+        await self.session.start()
+
+        # Should be queued for consumption
+        notification = await self.session.notifications.get()
+        assert isinstance(notification, LoggingMessageNotification)
+        assert notification.level == "info"
+
+        await self.session.stop()
+
+    async def test_notification_handler_does_not_crash_on_unknown_method(self):
+        self.session._initialized = True
+
+        bad_notification = {
+            "jsonrpc": "2.0",
+            "method": "notifications/unknown",
+            "params": {},
+        }
+        good_notification = {
+            "jsonrpc": "2.0",
+            "method": "notifications/message",
+            "params": {"level": "info", "data": {"message": "test log"}},
+        }
+        self.transport.queue_message(bad_notification)
+
+        await self.session.start()
+
+        # Should not break the session - notification queue should be empty
+        assert self.session.notifications.empty()
+        assert self.session._running is True
+
+        self.transport.queue_message(good_notification)
+        notification = await self.session.notifications.get()
+        assert isinstance(notification, LoggingMessageNotification)
+        assert notification.level == "info"
+
+        await self.session.stop()
+
     # async def test_send_request_enforces_initialization(self):
     #     request = PingRequest()
 
@@ -214,3 +261,72 @@ class TestClientSessionRequestResponse:
     #     assert self.session._initialized is True
 
     #     await self.session.stop()
+    async def test_response_handler_resolves_pending_request_with_result(self):
+        self.session._initialized = True
+
+        # Set up a pending request manually
+        request_id = 42
+        future = asyncio.Future()
+        self.session._pending_requests[request_id] = future
+
+        # Send success response
+        response_payload = {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "result": {"data": "test"},
+        }
+        self.transport.queue_message(response_payload, metadata={"test": "meta"})
+
+        await self.session.start()
+
+        # Future should be resolved with result and metadata
+        result, metadata = await future
+        assert result == {"data": "test"}
+        assert metadata == {"test": "meta"}
+
+        await self.session.stop()
+
+    async def test_response_handler_resolves_pending_request_with_error(self):
+        self.session._initialized = True
+
+        # Set up pending request
+        request_id = 42
+        future = asyncio.Future()
+        self.session._pending_requests[request_id] = future
+
+        # Send error response
+        error_payload = {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "error": {"code": -1, "message": "test error"},
+        }
+        self.transport.queue_message(error_payload)
+
+        await self.session.start()
+
+        # Future should be resolved with MCPError
+        with pytest.raises(MCPError) as exc_info:
+            await future
+        assert exc_info.value.error.message == "test error"
+
+        await self.session.stop()
+
+    async def test_response_handler_buffers_orphaned_response(self):
+        self.session._initialized = True
+
+        # Send response with no matching pending request
+        orphaned_payload = {"jsonrpc": "2.0", "id": 999, "result": {"orphaned": True}}
+        self.transport.queue_message(orphaned_payload, metadata={"meta": "data"})
+
+        await self.session.start()
+
+        # Wait for background message loop to process the queued message
+        await asyncio.sleep(0.001)
+
+        # Should be buffered, not cause errors
+        assert 999 in self.session._buffered_responses
+        buffered_payload, buffered_metadata = self.session._buffered_responses[999]
+        assert buffered_payload["result"] == {"orphaned": True}
+        assert buffered_metadata == {"meta": "data"}
+
+        await self.session.stop()

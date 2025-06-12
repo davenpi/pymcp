@@ -11,7 +11,12 @@ from mcp.protocol.base import (
     Notification,
     Result,
 )
-from mcp.protocol.common import CancelledNotification, EmptyResult, PingRequest
+from mcp.protocol.common import (
+    CancelledNotification,
+    EmptyResult,
+    PingRequest,
+    ProgressNotification,
+)
 from mcp.protocol.initialization import (
     ClientCapabilities,
     Implementation,
@@ -20,10 +25,27 @@ from mcp.protocol.initialization import (
     InitializeResult,
 )
 from mcp.protocol.jsonrpc import JSONRPCError, JSONRPCNotification, JSONRPCResponse
+from mcp.protocol.logging import LoggingMessageNotification
+from mcp.protocol.prompts import PromptListChangedNotification
+from mcp.protocol.resources import (
+    ResourceListChangedNotification,
+    ResourceUpdatedNotification,
+)
 from mcp.protocol.roots import ListRootsRequest, ListRootsResult, Root
 from mcp.protocol.sampling import CreateMessageRequest, CreateMessageResult
+from mcp.protocol.tools import ToolListChangedNotification
 from mcp.shared.new_exceptions import MCPError
 from mcp.transport.base import Transport, TransportMessage
+
+NOTIFICATION_CLASSES = {
+    "notifications/cancelled": CancelledNotification,
+    "notifications/message": LoggingMessageNotification,
+    "notifications/progress": ProgressNotification,
+    "notifications/resources/updated": ResourceUpdatedNotification,
+    "notifications/resources/list_changed": ResourceListChangedNotification,
+    "notifications/tools/list_changed": ToolListChangedNotification,
+    "notifications/prompts/list_changed": PromptListChangedNotification,
+}
 
 
 class ClientSession:
@@ -63,6 +85,7 @@ class ClientSession:
         self._initializing: asyncio.Future[InitializeResult] | None = None
         self._initialize_result: InitializeResult | None = None
         self._initialized = False
+        self.notifications: asyncio.Queue[Notification] = asyncio.Queue()
 
     async def start(self) -> None:
         """Start the session message loop."""
@@ -228,21 +251,20 @@ class ClientSession:
         payload = message.payload
         message_id = payload.get("id")
 
-        if message_id is not None and message_id in self._pending_requests:
-            future = self._pending_requests[message_id]
-
-            if "error" in payload:
-                protocol_error = Error.from_protocol(payload["error"])
-                mcp_error = MCPError(
-                    protocol_error, transport_metadata=message.metadata
-                )
-                future.set_exception(mcp_error)
-            elif "result" in payload:
-                future.set_result((payload["result"], message.metadata))
+        try:
+            if self._is_response(payload):
+                await self._handle_response(payload, message.metadata)
+            elif self._is_request(payload):
+                pass
+            elif self._is_notification(payload):
+                await self._handle_notification(payload)
             else:
-                future.set_exception(Exception("Invalid response format"))
+                raise ValueError(f"Unknown message type: {payload}")
+        except Exception as e:
+            print("Error handling message", e)
+            raise
 
-        elif message_id is not None and ("result" in payload or "error" in payload):
+        if message_id is not None and ("result" in payload or "error" in payload):
             # Buffer unmatched response for a short time
             self._buffered_responses[message_id] = (payload, message.metadata)
             # Optional: Log unexpected response for debugging
@@ -266,6 +288,51 @@ class ClientSession:
             pass
         else:
             pass  # TODO: Handle unknown message types.
+
+    def _is_request(self, payload: dict[str, Any]) -> bool:
+        return "method" in payload and "id" in payload
+
+    def _is_response(self, payload: dict[str, Any]) -> bool:
+        return "id" in payload and ("result" in payload or "error" in payload)
+
+    async def _handle_response(
+        self, payload: dict[str, Any], metadata: dict[str, Any] | None
+    ) -> None:
+        """Handle incoming response to a request we sent."""
+        message_id = payload["id"]
+
+        if message_id in self._pending_requests:
+            future = self._pending_requests[message_id]
+
+            if "error" in payload:
+                protocol_error = Error.from_protocol(payload["error"])
+                mcp_error = MCPError(protocol_error, transport_metadata=metadata)
+                future.set_exception(mcp_error)
+            elif "result" in payload:
+                future.set_result((payload["result"], metadata))
+        else:
+            self._buffered_responses[message_id] = (payload, metadata)
+            print(f"Buffered orphaned response for request ID {message_id}")
+
+    def _handle_request(self, payload: dict[str, Any]) -> None:
+        pass
+
+    async def _handle_notification(self, payload: dict[str, Any]) -> None:
+        try:
+            notification = self._parse_notification(payload)
+            await self.notifications.put(notification)
+        except Exception as e:
+            print("Error handling notification", e)
+
+    def _parse_notification(self, payload: dict[str, Any]) -> Notification:
+        method = payload["method"]
+        notification_class = NOTIFICATION_CLASSES.get(method)
+        if notification_class is None:
+            raise Exception(f"Unknown method: {method}")
+        return notification_class.from_protocol(payload)
+
+    def _is_notification(self, payload: dict[str, Any]) -> bool:
+        return "method" in payload and "id" not in payload
 
     def _parse_request(self, payload: dict[str, Any]) -> Request:
         """Parse JSON-RPC payload into typed request objects.
