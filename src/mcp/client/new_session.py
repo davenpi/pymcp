@@ -5,7 +5,7 @@ from typing import Any
 from mcp.protocol import CallToolRequest, CallToolResult, JSONRPCRequest, Request
 from mcp.protocol.base import (
     INTERNAL_ERROR,
-    INVALID_REQUEST,
+    METHOD_NOT_FOUND,
     PROTOCOL_VERSION,
     Error,
     Notification,
@@ -45,6 +45,12 @@ NOTIFICATION_CLASSES = {
     "notifications/resources/list_changed": ResourceListChangedNotification,
     "notifications/tools/list_changed": ToolListChangedNotification,
     "notifications/prompts/list_changed": PromptListChangedNotification,
+}
+
+REQUEST_CAPABILITY_REQUIREMENTS: dict[type[Request], str | None] = {
+    CreateMessageRequest: "sampling",
+    ListRootsRequest: "roots",
+    PingRequest: None,
 }
 
 
@@ -249,13 +255,12 @@ class ClientSession:
     async def _handle_message(self, message: TransportMessage) -> None:
         """Handle incoming message from transport."""
         payload = message.payload
-        message_id = payload.get("id")
 
         try:
             if self._is_response(payload):
                 await self._handle_response(payload, message.metadata)
             elif self._is_request(payload):
-                pass
+                await self._handle_request(payload, message.metadata)
             elif self._is_notification(payload):
                 await self._handle_notification(payload)
             else:
@@ -263,31 +268,6 @@ class ClientSession:
         except Exception as e:
             print("Error handling message", e)
             raise
-
-        if message_id is not None and ("result" in payload or "error" in payload):
-            # Buffer unmatched response for a short time
-            self._buffered_responses[message_id] = (payload, message.metadata)
-            # Optional: Log unexpected response for debugging
-            # logger.debug(f"Buffered unmatched response for request ID {message_id}")
-
-        elif "method" in payload and message_id is not None:
-            try:
-                request = self._parse_request(payload)
-                result_or_error = await self._route_request(request)
-                if isinstance(result_or_error, Result):
-                    response = JSONRPCResponse.from_result(result_or_error, message_id)
-                else:
-                    response = JSONRPCError.from_error(result_or_error, message_id)
-                await self.transport.send(response.to_wire(), message.metadata)
-            except Exception as e:
-                error = Error(code=INTERNAL_ERROR, message=str(e))
-                error_response = JSONRPCError.from_error(error, message_id)
-                await self.transport.send(error_response.to_wire(), message.metadata)
-
-        elif "method" in payload and message_id is None:
-            pass
-        else:
-            pass  # TODO: Handle unknown message types.
 
     def _is_request(self, payload: dict[str, Any]) -> bool:
         return "method" in payload and "id" in payload
@@ -314,9 +294,6 @@ class ClientSession:
             self._buffered_responses[message_id] = (payload, metadata)
             print(f"Buffered orphaned response for request ID {message_id}")
 
-    def _handle_request(self, payload: dict[str, Any]) -> None:
-        pass
-
     async def _handle_notification(self, payload: dict[str, Any]) -> None:
         try:
             notification = self._parse_notification(payload)
@@ -334,52 +311,78 @@ class ClientSession:
     def _is_notification(self, payload: dict[str, Any]) -> bool:
         return "method" in payload and "id" not in payload
 
-    def _parse_request(self, payload: dict[str, Any]) -> Request:
-        """Parse JSON-RPC payload into typed request objects.
+    async def _handle_request(
+        self, payload: dict[str, Any], metadata: dict[str, Any] | None
+    ) -> None:
+        """Handle incoming request from server."""
+        message_id = payload["id"]
 
-        Validates method name and delegates to appropriate Request subclass. This
-        ensures type safety throughout the request handling process.
-        """
+        try:
+            request = self._parse_request(payload)
+            result_or_error = await self._route_request(request)
+
+            if isinstance(result_or_error, Result):
+                response = JSONRPCResponse.from_result(result_or_error, message_id)
+            else:  # Error
+                response = JSONRPCError.from_error(result_or_error, message_id)
+
+            await self.transport.send(response.to_wire(), metadata)
+
+        except Exception as e:
+            # Unexpected error during request handling
+            error = Error(code=INTERNAL_ERROR, message=str(e))
+            error_response = JSONRPCError.from_error(error, message_id)
+            await self.transport.send(error_response.to_wire(), metadata)
+
+    def _parse_request(self, payload: dict[str, Any]) -> Request:
         method = payload["method"]
         if method == "sampling/createMessage":
-            return CreateMessageRequest.from_protocol(payload.get("params", {}))
+            return CreateMessageRequest.from_protocol(payload)
+        elif method == "ping":
+            return PingRequest.from_protocol(payload)
+        elif method == "roots/list":
+            return ListRootsRequest.from_protocol(payload)
         else:
-            raise Exception(f"Unknown method: {method}")
+            raise ValueError(f"Unknown request method: {method}")
 
     async def _route_request(self, request: Request) -> Result | Error:
-        """Route typed request to appropriate handler based on capabilities.
+        """Route request based on capabilities and available handlers."""
 
-        If the request type isn't supported by declared capabilities or if the
-        required handler is not configured, return an Error.
+        # Check capability requirement
+        required_capability = REQUEST_CAPABILITY_REQUIREMENTS.get(type(request))
+        if required_capability:
+            capability_value = getattr(self.capabilities, required_capability)
 
-        Returns:
-            Result if the request was handled successfully. Otherwise Error.
-        """
-        if isinstance(request, CreateMessageRequest):
-            if not self.capabilities.sampling:
+            if required_capability == "sampling" and not capability_value:
                 return Error(
-                    code=INVALID_REQUEST, message="Sampling capability not supported"
+                    code=METHOD_NOT_FOUND,
+                    message="Client does not support sampling capability",
                 )
+            elif required_capability == "roots" and capability_value is None:
+                return Error(
+                    code=METHOD_NOT_FOUND,
+                    message="Client does not support roots capability",
+                )
+
+        # Route to specific handler
+        if isinstance(request, PingRequest):
+            return EmptyResult()
+        elif isinstance(request, ListRootsRequest):
+            return ListRootsResult(roots=self.roots)
+        elif isinstance(request, CreateMessageRequest):
             if self.create_message_handler is None:
                 return Error(
-                    code=INTERNAL_ERROR, message="No create_message_handler configured"
+                    code=INTERNAL_ERROR,
+                    message=(
+                        "Sampling capability enabled but internal handler not"
+                        " configured"
+                    ),
                 )
             return await self.create_message_handler(request)
-
-        elif isinstance(request, ListRootsRequest):
-            if not self.capabilities.roots:
-                return Error(
-                    code=INVALID_REQUEST, message="Roots capability not supported"
-                )
-            return ListRootsResult(roots=self.roots)
-
-        elif isinstance(request, PingRequest):
-            return EmptyResult()
-
         else:
             return Error(
-                code=INVALID_REQUEST,
-                message=f"Unknown request type: {type(request).__name__}",
+                code=METHOD_NOT_FOUND,
+                message=f"Unknown request: {type(request).__name__}",
             )
 
     async def call_tool(

@@ -5,8 +5,19 @@ import pytest
 
 from mcp.client.new_session import ClientSession
 from mcp.protocol.common import CancelledNotification, PingRequest
-from mcp.protocol.initialization import ClientCapabilities, Implementation
+from mcp.protocol.content import TextContent
+from mcp.protocol.initialization import (
+    ClientCapabilities,
+    Implementation,
+    RootsCapability,
+)
 from mcp.protocol.logging import LoggingMessageNotification
+from mcp.protocol.roots import Root
+from mcp.protocol.sampling import (
+    CreateMessageRequest,
+    CreateMessageResult,
+    SamplingMessage,
+)
 from mcp.shared.new_exceptions import MCPError
 from tests.new_client.mock_transport import MockTransport
 
@@ -328,5 +339,182 @@ class TestClientSessionRequestResponse:
         buffered_payload, buffered_metadata = self.session._buffered_responses[999]
         assert buffered_payload["result"] == {"orphaned": True}
         assert buffered_metadata == {"meta": "data"}
+
+        await self.session.stop()
+
+    async def test_request_handler_responds_to_ping(self):
+        self.session._initialized = True
+
+        # Send a ping request
+        ping_payload = {"jsonrpc": "2.0", "method": "ping", "id": 42}
+        self.transport.queue_message(ping_payload)
+
+        await self.session.start()
+
+        # Wait for message processing
+        await asyncio.sleep(0.001)
+
+        # Should have sent back a response
+        response_message = self.transport.sent_messages[-1].payload
+        assert response_message["jsonrpc"] == "2.0"
+        assert response_message["id"] == 42
+        assert response_message["result"] == {}
+
+        await self.session.stop()
+
+    async def test_request_handler_rejects_list_roots_without_capability(self):
+        self.session._initialized = True
+        self.session.capabilities.roots = None
+        # Note: session starts with no roots capability by default
+
+        list_roots_payload = {"jsonrpc": "2.0", "method": "roots/list", "id": 42}
+        self.transport.queue_message(list_roots_payload)
+
+        await self.session.start()
+        await asyncio.sleep(0.001)
+
+        # Should send error response
+        response_message = self.transport.sent_messages[-1].payload
+        assert response_message["jsonrpc"] == "2.0"
+        assert response_message["id"] == 42
+        assert "error" in response_message
+        assert (
+            "does not support roots capability" in response_message["error"]["message"]
+        )
+
+        await self.session.stop()
+
+    async def test_request_handler_returns_configured_roots(self):
+        # Set up session with roots capability and some roots
+        roots = [Root(uri="file:///test", name="test")]
+        self.session.capabilities.roots = RootsCapability()
+        self.session.roots = roots
+        self.session._initialized = True
+
+        list_roots_payload = {"jsonrpc": "2.0", "method": "roots/list", "id": 42}
+        self.transport.queue_message(list_roots_payload)
+
+        await self.session.start()
+        await asyncio.sleep(0.001)
+
+        # Should return the configured roots
+        response_message = self.transport.sent_messages[-1].payload
+        assert response_message["id"] == 42
+        assert "result" in response_message
+        assert response_message["result"]["roots"] == [
+            root.model_dump(mode="json") for root in roots
+        ]
+
+        await self.session.stop()
+
+    async def test_request_handler_rejects_create_message_without_capability(self):
+        self.session._initialized = True
+        self.session.capabilities.sampling = False
+
+        sampling_message = SamplingMessage(
+            role="user",
+            content=TextContent(text="Hello, world!"),
+        )
+
+        create_message_payload = {
+            "jsonrpc": "2.0",
+            "method": "sampling/createMessage",
+            "id": 42,
+            "params": {
+                "messages": [sampling_message.model_dump(mode="json")],
+                "maxTokens": 100,
+            },
+        }
+        self.transport.queue_message(create_message_payload)
+
+        await self.session.start()
+        await asyncio.sleep(0.001)
+
+        # Should send error response
+        response_message = self.transport.sent_messages[-1].payload
+        assert response_message["jsonrpc"] == "2.0"
+        assert response_message["id"] == 42
+        assert "error" in response_message
+        assert (
+            "does not support sampling capability"
+            in response_message["error"]["message"]
+        )
+
+        await self.session.stop()
+
+    async def test_request_handler_rejects_create_message_without_handler(self):
+        # Enable capability but don't provide handler
+        self.session.capabilities.sampling = True
+        self.session._initialized = True
+
+        sampling_message = SamplingMessage(
+            role="user",
+            content=TextContent(text="Hello, world!"),
+        )
+
+        create_message_payload = {
+            "jsonrpc": "2.0",
+            "method": "sampling/createMessage",
+            "id": 42,
+            "params": {
+                "messages": [sampling_message.model_dump(mode="json")],
+                "maxTokens": 100,
+            },
+        }
+        self.transport.queue_message(create_message_payload)
+
+        await self.session.start()
+        await asyncio.sleep(0.001)
+
+        # Should send error response
+        response_message = self.transport.sent_messages[-1].payload
+        assert "error" in response_message
+        assert (
+            "Sampling capability enabled but internal handler not configured"
+            in response_message["error"]["message"]
+        )
+
+        await self.session.stop()
+
+    async def test_request_handler_calls_create_message_handler(self):
+        self.session.capabilities.sampling = True
+
+        async def mock_handler(request: CreateMessageRequest) -> CreateMessageResult:
+            return CreateMessageResult(
+                role="assistant",
+                content=TextContent(text="test response"),
+                model="test-model",
+                stop_reason="endTurn",
+            )
+
+        self.session.create_message_handler = mock_handler
+        self.session._initialized = True
+
+        sampling_message = SamplingMessage(
+            role="user",
+            content=TextContent(text="Hello, world!"),
+        )
+
+        create_message_payload = {
+            "jsonrpc": "2.0",
+            "method": "sampling/createMessage",
+            "id": 42,
+            "params": {
+                "messages": [sampling_message.model_dump(mode="json")],
+                "maxTokens": 100,
+            },
+        }
+        self.transport.queue_message(create_message_payload)
+
+        await self.session.start()
+        await asyncio.sleep(0.001)
+
+        # Should successfully call handler and return result
+        response_message = self.transport.sent_messages[-1].payload
+        assert response_message["jsonrpc"] == "2.0"
+        assert response_message["id"] == 42
+        assert "result" in response_message
+        assert response_message["result"]["model"] == "test-model"
+        assert response_message["result"]["content"]["text"] == "test response"
 
         await self.session.stop()
