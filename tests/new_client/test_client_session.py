@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from mcp.client.new_session import ClientSession
+from mcp.protocol.base import INTERNAL_ERROR
 from mcp.protocol.common import CancelledNotification, PingRequest
 from mcp.protocol.content import TextContent
 from mcp.protocol.initialization import (
@@ -518,3 +519,164 @@ class TestClientSessionRequestResponse:
         assert response_message["result"]["content"]["text"] == "test response"
 
         await self.session.stop()
+
+    async def test_request_handler_rejects_malformed_id(self):
+        self.session._initialized = True
+
+        # Test different types of malformed IDs
+        test_cases = [
+            {"jsonrpc": "2.0", "method": "ping"},  # Missing ID
+            {"jsonrpc": "2.0", "method": "ping", "id": None},  # Null ID
+            {"jsonrpc": "2.0", "method": "ping", "id": {"not": "valid"}},  # Object ID
+            {"jsonrpc": "2.0", "method": "ping", "id": [1, 2, 3]},  # Array ID
+        ]
+
+        for malformed_payload in test_cases:
+            self.transport.queue_message(malformed_payload)
+
+        await self.session.start()
+        await asyncio.sleep(0.001)
+
+        # Should have attempted to send error responses, but may have failed due to bad
+        # IDs. The key thing is the session should still be running
+        assert self.session._running is True
+
+        # Test that valid requests still work after malformed ones
+        valid_payload = {"jsonrpc": "2.0", "method": "ping", "id": 42}
+        self.transport.queue_message(valid_payload)
+        await asyncio.sleep(0.001)
+
+        # Should have at least one successful response for the valid request
+        valid_responses = [
+            msg for msg in self.transport.sent_messages if msg.payload.get("id") == 42
+        ]
+        assert len(valid_responses) == 1
+
+        await self.session.stop()
+
+    async def test_create_message_handler_exception_returns_internal_error(self):
+        self.session.capabilities.sampling = True
+        self.session._initialized = True
+
+        async def broken_handler(request: CreateMessageRequest) -> CreateMessageResult:
+            raise ValueError("Something went wrong in user code!")
+
+        self.session.create_message_handler = broken_handler
+
+        sampling_message = SamplingMessage(
+            role="user",
+            content=TextContent(text="Hello, world!"),
+        )
+
+        create_message_payload = {
+            "jsonrpc": "2.0",
+            "method": "sampling/createMessage",
+            "id": 42,
+            "params": {
+                "messages": [sampling_message.model_dump(mode="json")],
+                "maxTokens": 100,
+            },
+        }
+        self.transport.queue_message(create_message_payload)
+
+        await self.session.start()
+        await asyncio.sleep(0.001)
+
+        # Should get back an INTERNAL_ERROR response, not crash
+        response_message = self.transport.sent_messages[-1].payload
+        assert response_message["jsonrpc"] == "2.0"
+        assert response_message["id"] == 42
+        assert "error" in response_message
+        assert response_message["error"]["code"] == INTERNAL_ERROR
+        assert (
+            "Something went wrong in user code!" in response_message["error"]["message"]
+        )
+
+        # Session should still be running
+        assert self.session._running is True
+
+        await self.session.stop()
+
+    async def test_slow_create_message_handler_does_not_block_loop(self):
+        self.session.capabilities.sampling = True
+        self.session._initialized = True
+
+        # Use events to control timing precisely
+        handler_started = asyncio.Event()
+        handler_can_continue = asyncio.Event()
+
+        async def controlled_slow_handler(
+            request: CreateMessageRequest,
+        ) -> CreateMessageResult:
+            handler_started.set()  # Signal that handler has started
+            await (
+                handler_can_continue.wait()
+            )  # Wait for test to give permission to continue
+            return CreateMessageResult(
+                role="assistant",
+                content=TextContent(text="slow response"),
+                model="test-model",
+                stop_reason="endTurn",
+            )
+
+        self.session.create_message_handler = controlled_slow_handler
+
+        # Send slow request then fast request
+        self.transport.queue_message(
+            {
+                "jsonrpc": "2.0",
+                "method": "sampling/createMessage",
+                "id": 1,
+                "params": {
+                    "messages": [
+                        SamplingMessage(
+                            role="user", content=TextContent(text="test")
+                        ).model_dump(mode="json")
+                    ],
+                    "maxTokens": 100,
+                },
+            }
+        )
+        self.transport.queue_message({"jsonrpc": "2.0", "method": "ping", "id": 2})
+
+        await self.session.start()
+
+        # Wait for slow handler to start
+        await handler_started.wait()
+
+        # At this point, slow handler is running but blocked
+        # The ping should still get processed
+        await asyncio.sleep(0.01)  # Give message loop a chance to process ping
+
+        ping_responses = [
+            msg for msg in self.transport.sent_messages if msg.payload.get("id") == 2
+        ]
+        assert len(ping_responses) == 1, (
+            "Ping should be processed while slow handler is blocked"
+        )
+
+        # Now let the slow handler finish
+        handler_can_continue.set()
+        await asyncio.sleep(0.01)
+        assert len(self.transport.sent_messages) == 2, (
+            f"Expected 2 responses, got {len(self.transport.sent_messages)}"
+        )
+
+        ping_responses = [
+            msg for msg in self.transport.sent_messages if msg.payload.get("id") == 2
+        ]
+        slow_responses = [
+            msg for msg in self.transport.sent_messages if msg.payload.get("id") == 1
+        ]
+
+        assert len(ping_responses) == 1, "Should have exactly one ping response"
+        assert len(slow_responses) == 1, "Should have exactly one slow handler response"
+
+        # Verify the ping response is correct
+        ping_response = ping_responses[0].payload
+        assert ping_response["result"] == {}
+
+        # Verify the slow response is correct
+        slow_response = slow_responses[0].payload
+        assert "result" in slow_response
+        assert slow_response["result"]["model"] == "test-model"

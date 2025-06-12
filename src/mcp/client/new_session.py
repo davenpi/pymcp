@@ -239,28 +239,42 @@ class ClientSession:
         """Background task: process incoming messages."""
         try:
             while self._running:
-                message = await self.transport.receive()
-                await self._handle_message(message)
-        except MCPError as e:
-            # TODO: Handle MCPError.
-            print("MCPError", e)
-            pass
-        except Exception:
+                try:
+                    message = await self.transport.receive()
+                except ConnectionError:
+                    print("Transport connection lost")
+                    break
+                except Exception as e:
+                    print("Transport error while receiving message:", e)
+                    break
+                try:
+                    await self._handle_message(message)
+                except Exception as e:
+                    print(f"Error handling message: {e}")
+                    continue
+        finally:
             self._running = False
-            # Cancel pending requests
-            for future in self._pending_requests.values():
-                if not future.done():
-                    future.set_exception(ConnectionError("Transport closed"))
+            self._cancel_pending_requests("Message loop terminated")
+
+    def _cancel_pending_requests(self, reason: str) -> None:
+        for request_id, future in self._pending_requests.items():
+            if not future.done():
+                future.set_exception(
+                    ConnectionError(f"Request {request_id} cancelled: {reason}")
+                )
+        self._pending_requests.clear()
 
     async def _handle_message(self, message: TransportMessage) -> None:
         """Handle incoming message from transport."""
         payload = message.payload
 
         try:
+            if self._is_request(payload) or self._is_response(payload):
+                self._validate_request_id(payload)
             if self._is_response(payload):
                 await self._handle_response(payload, message.metadata)
             elif self._is_request(payload):
-                await self._handle_request(payload, message.metadata)
+                asyncio.create_task(self._handle_request(payload, message.metadata))
             elif self._is_notification(payload):
                 await self._handle_notification(payload)
             else:
@@ -344,6 +358,28 @@ class ClientSession:
             return ListRootsRequest.from_protocol(payload)
         else:
             raise ValueError(f"Unknown request method: {method}")
+
+    def _validate_request_id(self, payload: dict[str, Any]) -> int | str:
+        """Validate and extract request ID from payload.
+
+        Returns:
+            The validated request ID (int or str)
+
+        Raises:
+            ValueError: If ID is missing or invalid type
+        """
+        if "id" not in payload:
+            raise ValueError("Request missing required 'id' field")
+
+        request_id = payload["id"]
+
+        if not isinstance(request_id, int | str):
+            raise ValueError(
+                f"Invalid request ID type: {type(request_id).__name__}."
+                " Must be string or number."
+            )
+
+        return request_id
 
     async def _route_request(self, request: Request) -> Result | Error:
         """Route request based on capabilities and available handlers."""
