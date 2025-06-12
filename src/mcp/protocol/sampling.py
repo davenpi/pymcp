@@ -43,13 +43,13 @@ class CreateMessageRequest(Request):
 
     method: Literal["sampling/createMessage"] = "sampling/createMessage"
     messages: list[SamplingMessage]
+    max_tokens: int = Field(alias="maxTokens")
     preferences: ModelPreferences | None = Field(default=None, alias="modelPreferences")
     system_prompt: str | None = Field(default=None, alias="systemPrompt")
     include_context: Literal["none", "thisServer", "allServers"] | None = Field(
         default=None, alias="includeContext"
     )
     temperature: float | int | None = None
-    max_tokens: int = Field(alias="maxTokens")
     stop_sequences: list[str] | None = Field(default=None, alias="stopSequences")
     llm_metadata: dict[str, Any] | None = None
     """
