@@ -14,13 +14,9 @@ The flow is straightforward:
 3. **Execution**: LLM calls the tool with `CallToolRequest` 
 4. **Learning**: Tool returns results (or errors) that LLM can see and learn from
 
-Note: LLMs consume both results and errors as natural language, so they can learn from
-failures and adjust their approach. This isn't just function calling—it's
-giving LLMs the ability to understand what went wrong and try again.
-
-Since LLMs consume your tool descriptions, schemas, and error messages directly, the
-quality of your natural language documentation determines how effectively the LLM can
-use your tools.
+Note: LLMs consume both results and errors so they can learn from failures and adjust
+their approach. The quality of your tool outputs, descriptions, and error messages
+determines how effectively the LLM can use your tools.
 """
 
 from typing import Any, Literal
