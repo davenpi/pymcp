@@ -8,9 +8,10 @@ from mcp.protocol.base import (
     INVALID_REQUEST,
     PROTOCOL_VERSION,
     Error,
+    Notification,
     Result,
 )
-from mcp.protocol.common import EmptyResult, PingRequest
+from mcp.protocol.common import CancelledNotification, EmptyResult, PingRequest
 from mcp.protocol.initialization import (
     ClientCapabilities,
     Implementation,
@@ -137,16 +138,12 @@ class ClientSession:
             await self.transport.send(jsonrpc_request.to_wire(), transport_metadata)
             result_data, _ = await future
             init_result = InitializeResult.from_protocol(result_data)
-
-            self._validate_server(init_result)
+            self._validate_server(
+                init_result
+            )  # TODO. SEND INITIALIZATION ERROR IF INVALID.
 
             initialized_notification = InitializedNotification()
-            jsonrpc_notification = JSONRPCNotification.from_notification(
-                initialized_notification
-            )
-            await self.transport.send(
-                jsonrpc_notification.to_wire(), transport_metadata
-            )
+            await self.send_notification(initialized_notification, transport_metadata)
 
             self._initialized = True
             self._initialize_result = init_result
@@ -155,7 +152,10 @@ class ClientSession:
             self._pending_requests.pop(request_id, None)
 
     async def send_request(
-        self, request: Request, transport_metadata: dict[str, Any] | None = None
+        self,
+        request: Request,
+        transport_metadata: dict[str, Any] | None = None,
+        timeout: float = 30.0,
     ) -> tuple[Any, dict[str, Any] | None]:
         """Send a request and wait for a response.
 
@@ -166,6 +166,7 @@ class ClientSession:
             request: The request to send
             transport_metadata: Transport specific metadata to send with the request
                 (auth tokens, etc.)
+            timeout: Timeout in seconds for the request.
 
         Returns:
             tuple[Any, dict[str, Any] | None]: The result and transport metadata.
@@ -184,9 +185,26 @@ class ClientSession:
 
         try:
             await self.transport.send(jsonrpc_request.to_wire(), transport_metadata)
-            return await future
+            return await asyncio.wait_for(future, timeout)
+        except asyncio.TimeoutError:
+            cancelled_notification = CancelledNotification(
+                request_id=request_id,  # type: ignore
+                reason="Request timed out",
+            )
+            await self.send_notification(cancelled_notification, transport_metadata)
+            raise TimeoutError(f"Request {request_id} timed out after {timeout}s")
         finally:
             self._pending_requests.pop(request_id, None)
+
+    async def send_notification(
+        self,
+        notification: Notification,
+        transport_metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Send a notification to the server."""
+        await self.start()
+        jsonrpc_notification = JSONRPCNotification.from_notification(notification)
+        await self.transport.send(jsonrpc_notification.to_wire(), transport_metadata)
 
     async def _message_loop(self) -> None:
         """Background task: process incoming messages."""
@@ -227,7 +245,6 @@ class ClientSession:
         elif message_id is not None and ("result" in payload or "error" in payload):
             # Buffer unmatched response for a short time
             self._buffered_responses[message_id] = (payload, message.metadata)
-            print(f"Buffered unmatched response for request ID {message_id}")
             # Optional: Log unexpected response for debugging
             # logger.debug(f"Buffered unmatched response for request ID {message_id}")
 

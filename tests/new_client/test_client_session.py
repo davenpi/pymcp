@@ -4,12 +4,12 @@ from unittest.mock import AsyncMock
 import pytest
 
 from mcp.client.new_session import ClientSession
-from mcp.protocol.common import PingRequest
+from mcp.protocol.common import CancelledNotification, PingRequest
 from mcp.protocol.initialization import ClientCapabilities, Implementation
 from tests.new_client.mock_transport import MockTransport
 
 
-class TestClientLifecycle:
+class TestClientSessionLifecycle:
     @pytest.fixture(autouse=True)
     def setup_fixtures(self):
         self.transport = MockTransport()
@@ -64,6 +64,27 @@ class TestClientLifecycle:
         self.transport.close = close_mock
         await self.session.stop()
         close_mock.assert_awaited_once()
+
+    async def test_request_timeout_does_not_affect_subsequent_requests(self):
+        self.session._initialized = True
+
+        # First request will timeout
+        request1 = PingRequest()
+        with pytest.raises(TimeoutError):
+            await self.session.send_request(request1, timeout=1e-9)
+
+        # Second request should work fine
+        request2 = PingRequest()
+        self.transport.queue_response(request_id=1, result={})
+
+        result, _ = await self.session.send_request(request2)
+
+        assert result == {}
+        assert self.session._running is True
+        assert self.session._pending_requests == {}
+        assert len(self.transport.sent_messages) == 3  # 1 ping, 1 cancel, 1 response
+
+        await self.session.stop()
 
 
 class TestClientSessionRequestResponse:
@@ -136,3 +157,60 @@ class TestClientSessionRequestResponse:
         assert result2 == {"result": "second"}
 
         await self.session.stop()
+
+    async def test_request_timeout_send_cancellation_and_raises(self):
+        self.session._initialized = True
+
+        request = PingRequest()
+        with pytest.raises(TimeoutError):
+            await self.session.send_request(request, timeout=1e-9)
+
+        assert self.session._pending_requests == {}
+
+        cancel_message = self.transport.sent_messages[-1].payload
+        assert cancel_message["method"] == "notifications/cancelled"
+
+        await self.session.stop()
+
+    async def test_send_notification_sends_message_to_transport(self):
+        notification = CancelledNotification(request_id=42, reason="test")
+        await self.session.send_notification(notification)
+
+        sent_message = self.transport.sent_messages[-1].payload
+        assert sent_message["method"] == "notifications/cancelled"
+        assert sent_message["params"]["requestId"] == 42
+        assert sent_message["params"]["reason"] == "test"
+        assert "id" not in sent_message  # Notifications don't have IDs
+
+        await self.session.stop()
+
+    async def test_send_notification_propagates_transport_errors(self):
+        # Make transport.send raise
+        self.transport.closed = True
+
+        notification = CancelledNotification(request_id=42, reason="test")
+
+        with pytest.raises(ConnectionError, match="Transport closed"):
+            await self.session.send_notification(notification)
+
+        await self.session.stop()
+
+    # async def test_send_request_enforces_initialization(self):
+    #     request = PingRequest()
+
+    #     # Should trigger initialization automatically
+    #     self.transport.queue_response(
+    #         request_id=0,
+    #         result={
+    #             "protocolVersion": PROTOCOL_VERSION,
+    #             "capabilities": {},
+    #             "serverInfo": {"name": "test", "version": "1.0"},
+    #         },
+    #     )
+    #     self.transport.queue_response(request_id=1, result={})
+    #     result, _ = await self.session.send_request(request)
+
+    #     assert result == {}
+    #     assert self.session._initialized is True
+
+    #     await self.session.stop()
