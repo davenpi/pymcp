@@ -113,8 +113,39 @@ class ClientSession:
         await self.transport.close()
 
     async def initialize(
-        self, transport_metadata: dict[str, Any] | None = None
+        self, transport_metadata: dict[str, Any] | None = None, timeout: float = 30.0
     ) -> InitializeResult:
+        """
+        Initialize the MCP session with the server.
+
+        Performs the required MCP handshake: sends an InitializeRequest with this
+        client's capabilities, waits for the server's InitializeResult, validates
+        protocol compatibility, and sends the final InitializedNotification.
+
+        This automatically starts the session's message loop if it isn't already
+        running. After successful initialization, the session is ready for normal
+        operation.
+
+        Args:
+            transport_metadata: Optional metadata to include with initialization
+                messages. The meaning depends on your transport implementation.
+            timeout: Maximum time in seconds to wait for server response.
+                Defaults to 30 seconds.
+
+        Returns:
+            The server's initialization result, containing its capabilities, name,
+            and protocol version.
+
+        Raises:
+            TimeoutError: If the server doesn't respond within the timeout period.
+            ValueError: If the server uses an incompatible protocol version.
+            ConnectionError: If the transport fails during initialization.
+
+        Note:
+            This method is idempotent. Multiple calls return the same result
+            without re-initializing. If initialization is already in progress,
+            this waits for it to complete.
+        """
         if self._initialized and self._initialize_result is not None:
             return self._initialize_result
 
@@ -122,7 +153,7 @@ class ClientSession:
             return await self._initializing
 
         self._initializing = asyncio.create_task(
-            self._do_initialize(transport_metadata)
+            self._do_initialize(transport_metadata, timeout)
         )
         try:
             result = await self._initializing
@@ -131,6 +162,27 @@ class ClientSession:
             self._initializing = None
 
     async def _ensure_initialized(self) -> None:
+        """
+        Ensure the session is initialized, triggering initialization if needed.
+
+        This is a convenience method for internal operations that require an
+        initialized session. If the session is already initialized, returns
+        immediately. If initialization is in progress, waits for it to complete.
+        Otherwise, starts initialization with default parameters.
+
+        This method is used internally before operations like sending requests
+        or accessing server capabilities, ensuring the session is ready without
+        requiring callers to manage initialization state.
+
+        Raises:
+            ValueError: If initialization fails due to protocol incompatibility.
+            ConnectionError: If transport operations fail during initialization.
+            Any exception that initialize() might raise.
+
+        Note:
+            This is an internal helper. External code should call initialize()
+            directly for explicit control over initialization parameters.
+        """
         if self._initialized:
             return
 
@@ -140,16 +192,40 @@ class ClientSession:
 
         await self.initialize()
 
-    def _validate_server(self, init_result: InitializeResult) -> None:
-        if init_result.protocol_version != PROTOCOL_VERSION:
-            raise ValueError(
-                f"Protocol version mismatch: client version {PROTOCOL_VERSION} !="
-                f" server version {init_result.protocol_version}"
-            )
-
     async def _do_initialize(
-        self, transport_metadata: dict[str, Any] | None = None
+        self, transport_metadata: dict[str, Any] | None = None, timeout: float = 30.0
     ) -> InitializeResult:
+        """
+        Execute the complete MCP initialization sequence with timeout handling.
+
+        Implements the three-step MCP handshake protocol:
+        1. Send InitializeRequest with client info and capabilities
+        2. Receive and validate InitializeResult from server (with timeout)
+        3. Send InitializedNotification to complete the handshake
+
+        This method handles the low-level protocol details including request ID
+        management, response correlation, and protocol version validation. If the
+        server doesn't respond within the timeout, sends a CancelledNotification
+        and stops the session. On any failure, the session is cleanly stopped to
+        prevent partial initialization states.
+
+        Args:
+            transport_metadata: Optional metadata passed to transport operations.
+            timeout: Maximum time in seconds to wait for server response.
+
+        Returns:
+            The validated server initialization result.
+
+        Raises:
+            TimeoutError: If server doesn't respond within the timeout period.
+            ValueError: If server protocol version is incompatible.
+            ConnectionError: If transport operations fail.
+            Any exception raised by the server or transport layer.
+
+        Note:
+            This is an internal implementation method. Use initialize() instead,
+            which provides idempotency and concurrent call handling.
+        """
         await self.start()
         init_request = InitializeRequest(
             client_info=self.client_info,  # type: ignore[call-arg]
@@ -165,11 +241,14 @@ class ClientSession:
 
         try:
             await self.transport.send(jsonrpc_request.to_wire(), transport_metadata)
-            result_data, _ = await future
+            result_data, _ = await asyncio.wait_for(future, timeout)
             init_result = InitializeResult.from_protocol(result_data)
-            self._validate_server(
-                init_result
-            )  # TODO. SEND INITIALIZATION ERROR IF INVALID.
+            if init_result.protocol_version != PROTOCOL_VERSION:
+                await self.stop()
+                raise ValueError(
+                    f"Protocol version mismatch: client version {PROTOCOL_VERSION} !="
+                    f" server version {init_result.protocol_version}"
+                )
 
             initialized_notification = InitializedNotification()
             await self.send_notification(initialized_notification, transport_metadata)
@@ -177,6 +256,17 @@ class ClientSession:
             self._initialized = True
             self._initialize_result = init_result
             return init_result
+        except asyncio.TimeoutError:
+            cancelled_notification = CancelledNotification(
+                request_id=request_id,  # type: ignore
+                reason="Initialization timed out",
+            )
+            await self.send_notification(cancelled_notification, transport_metadata)
+            await self.stop()
+            raise TimeoutError(f"Initialization timed out after {timeout}s")
+        except Exception:
+            await self.stop()
+            raise
         finally:
             self._pending_requests.pop(request_id, None)
 
