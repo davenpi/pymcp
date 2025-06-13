@@ -70,16 +70,19 @@ class ToolAnnotations(ProtocolModel):
     """
     True if the tool only reads data without making changes.
     """
+
     destructive_hint: bool = Field(default=True, alias="destructiveHint")
     """
     True if the tool might delete or overwrite existing data. Defaults to True for
     safety.
     """
+
     idempotent_hint: bool = Field(default=False, alias="idempotentHint")
     """
     True if calling the tool multiple times with same arguments has no additional
     effect.
     """
+
     open_world_hint: bool = Field(default=True, alias="openWorldHint")
     """
     True if the tool interacts with external systems (web, APIs). False for contained
