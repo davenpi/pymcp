@@ -281,11 +281,6 @@ class ClientSession:
             self._initialize_result = init_result
             return init_result
         except asyncio.TimeoutError:
-            cancelled_notification = CancelledNotification(
-                request_id=request_id,  # type: ignore
-                reason="Initialization timed out",
-            )
-            await self.send_notification(cancelled_notification, transport_metadata)
             await self.stop()
             raise TimeoutError(f"Initialization timed out after {timeout}s")
         except Exception:

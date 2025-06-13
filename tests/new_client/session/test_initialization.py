@@ -151,7 +151,7 @@ class TestClientSessionInitialization(BaseSessionTest):
         # Assert: pending request should be cleaned up
         assert len(self.session._pending_requests) == 0
 
-    async def test_initialize_sends_cancelled_notification_and_stops_session_on_timeout(
+    async def test_initialize_raises_timeout_error_and_stops_session_on_timeout(
         self,
     ):
         # Arrange: we'll start initialization but never respond
@@ -160,21 +160,12 @@ class TestClientSessionInitialization(BaseSessionTest):
         with pytest.raises(TimeoutError, match="Initialization timed out after 0.01s"):
             await self.session.initialize(timeout=0.01)
 
-        # Assert: should have sent initialize request and cancelled notification
-        assert len(self.transport.sent_messages) == 2
+        # Assert: should have sent initialize request
+        assert len(self.transport.sent_messages) == 1
 
         init_request = self.transport.sent_messages[0]
         assert init_request.payload["method"] == "initialize"
         assert init_request.payload["id"] == 0
-
-        cancelled_notification = self.transport.sent_messages[1]
-        assert cancelled_notification.payload["method"] == "notifications/cancelled"
-        assert cancelled_notification.payload["params"]["requestId"] == 0
-        assert (
-            cancelled_notification.payload["params"]["reason"]
-            == "Initialization timed out"
-        )
-        assert "id" not in cancelled_notification.payload  # notifications have no id
 
         # Assert: session should be cleanly stopped
         assert self.transport.closed is True
