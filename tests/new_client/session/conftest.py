@@ -1,6 +1,10 @@
 import asyncio
 from typing import Any
 
+import pytest
+
+from mcp.client.new_session import ClientSession
+from mcp.protocol.initialization import ClientCapabilities, Implementation
 from mcp.transport.base import Transport, TransportMessage
 
 
@@ -44,3 +48,25 @@ class MockTransport(Transport):
 
     async def close(self) -> None:
         self.closed = True
+
+
+class BaseSessionTest:
+    @pytest.fixture(autouse=True)
+    def setup_fixtures(self):
+        self.transport = MockTransport()
+        self.session = ClientSession(
+            self.transport,
+            client_info=Implementation(name="test-client", version="1.0.0"),
+            capabilities=ClientCapabilities(),
+        )
+
+    async def wait_for_sent_request(self, method: str) -> None:
+        """Wait for a request to be sent - simple test sync helper."""
+        for _ in range(100):  # Max 100ms wait
+            if any(
+                msg.payload.get("method") == method
+                for msg in self.transport.sent_messages
+            ):
+                return
+            await asyncio.sleep(0.001)
+        raise AssertionError(f"Request {method} never sent")
