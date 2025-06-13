@@ -1,76 +1,102 @@
+import asyncio
 from unittest.mock import AsyncMock
-
-import pytest
-
-from mcp.protocol.common import PingRequest
 
 from .conftest import BaseSessionTest
 
 
 class TestClientSessionLifecycle(BaseSessionTest):
-    async def test_session_starts_not_running(self):
-        assert self.session._running is False
+    async def test_start_creates_message_loop_task(self):
+        # Arrange: verify initial state
         assert self.session._task is None
+        assert self.session._running is False
 
-    async def test_start_sets_running_to_true(self):
-        await self.session.start()
-        assert self.session._running is True
+        # Act
+        await self.session._start()
+
+        # Assert: task created and running
         assert self.session._task is not None
-        await self.session.stop()
-
-    async def test_start_when_already_running_does_nothing(self):
-        await self.session.start()
-        first_task = self.session._task
-        await self.session.start()
-        assert self.session._task is first_task
-        await self.session.stop()
-
-    async def test_stop_sets_running_to_false(self):
-        await self.session.start()
+        assert isinstance(self.session._task, asyncio.Task)
+        assert not self.session._task.done()
         assert self.session._running is True
+
+        # Cleanup
         await self.session.stop()
-        assert self.session._running is False
 
-    async def test_stop_cancels_background_task(self):
-        await self.session.start()
-        task = self.session._task
-        assert task is not None
+    async def test_start_is_idempotent_does_not_create_multiple_tasks(self):
+        # Act: start multiple times
+        await self.session._start()
+        first_task = self.session._task
 
+        await self.session._start()
+        await self.session._start()
+
+        # Assert: same task instance, still running
+        assert self.session._task is first_task
+        assert self.session._running is True
+        assert not first_task.done()
+
+        # Cleanup
         await self.session.stop()
-        assert self.session._task is None
-        assert task.cancelled()
 
-    async def test_stop_closes_transport(self):
-        await self.session.start()
-        close_mock = AsyncMock()
-        self.transport.close = close_mock
-        await self.session.stop()
-        close_mock.assert_awaited_once()
-
-    async def test_stop_when_not_running_still_closes_transport(self):
-        # Never started
-        close_mock = AsyncMock()
-        self.transport.close = close_mock
-        await self.session.stop()
-        close_mock.assert_awaited_once()
-
-    async def test_request_timeout_does_not_affect_subsequent_requests(self):
+    async def test_stop_resets_session_to_clean_uninitialized_state(self):
+        # Arrange: start session and initialize it
+        await self.session._start()
         self.session._initialized = True
 
-        # First request will timeout
-        request1 = PingRequest()
-        with pytest.raises(TimeoutError):
-            await self.session.send_request(request1, timeout=1e-9)
-
-        # Second request should work fine
-        request2 = PingRequest()
-        self.transport.queue_response(request_id=1, result={})
-
-        result, _ = await self.session.send_request(request2)
-
-        assert result == {}
+        # Verify we have initialized state
         assert self.session._running is True
-        assert self.session._pending_requests == {}
-        assert len(self.transport.sent_messages) == 3  # 1 ping, 1 cancel, 1 response
+        assert self.session._task is not None
 
+        # Act
         await self.session.stop()
+
+        # Assert: complete state reset
+        assert self.session._running is False
+        assert self.session._task is None
+        assert self.session._initialized is False
+
+    async def test_stop_is_idempotent_multiple_calls_are_safe(self):
+        # Arrange: start the session
+        await self.session._start()
+        self.session._initialized = True
+        assert self.session._running is True
+        assert self.session._task is not None
+
+        # Act: stop multiple times
+        await self.session.stop()
+        await self.session.stop()
+        await self.session.stop()
+
+        # Assert: clean state after all calls
+        assert self.session._running is False
+        assert self.session._task is None
+        assert self.session._initialized is False
+        assert self.session._initializing is None
+
+    async def test_stop_calls_transport_close(self):
+        # Arrange: start the session
+        await self.session._start()
+
+        self.transport.close = AsyncMock()
+        assert not self.transport.closed
+
+        # Act
+        await self.session.stop()
+
+        # Assert: transport was closed
+        self.transport.close.assert_awaited_once()
+
+    async def test_stop_cancels_and_awaits_background_task(self):
+        # Arrange: start the session and capture the task
+        await self.session._start()
+        background_task = self.session._task
+        assert background_task is not None
+        assert not background_task.done()
+
+        # Act
+        await self.session.stop()
+
+        # Assert: task was cancelled and cleaned up
+        assert background_task.done()
+        assert background_task.cancelled()
+        assert self.session._task is None

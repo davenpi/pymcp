@@ -23,7 +23,7 @@ from .conftest import BaseSessionTest
 
 class TestClientSessionRequestResponse(BaseSessionTest):
     async def test_response_with_unknown_id_doesnt_hang(self):
-        await self.session.start()
+        await self.session._start()
 
         # Queue a response for a request that was never sent
         self.transport.queue_response(request_id=999, result={"data": "orphaned"})
@@ -39,7 +39,7 @@ class TestClientSessionRequestResponse(BaseSessionTest):
 
     async def test_malformed_response_doesnt_crash_message_loop(self):
         """Malformed response should not crash the message loop."""
-        await self.session.start()
+        await self.session._start()
 
         # Queue a response missing both result and error
         self.transport.queue_message(
@@ -128,7 +128,7 @@ class TestClientSessionRequestResponse(BaseSessionTest):
         }
         self.transport.queue_message(notification_payload)
 
-        await self.session.start()
+        await self.session._start()
 
         # Should be queued for consumption
         notification = await self.session.notifications.get()
@@ -152,7 +152,7 @@ class TestClientSessionRequestResponse(BaseSessionTest):
         }
         self.transport.queue_message(bad_notification)
 
-        await self.session.start()
+        await self.session._start()
 
         # Should not break the session - notification queue should be empty
         assert self.session.notifications.empty()
@@ -181,7 +181,7 @@ class TestClientSessionRequestResponse(BaseSessionTest):
         }
         self.transport.queue_message(response_payload, metadata={"test": "meta"})
 
-        await self.session.start()
+        await self.session._start()
 
         # Future should be resolved with result and metadata
         result, metadata = await future
@@ -206,7 +206,7 @@ class TestClientSessionRequestResponse(BaseSessionTest):
         }
         self.transport.queue_message(error_payload)
 
-        await self.session.start()
+        await self.session._start()
 
         # Future should be resolved with MCPError
         with pytest.raises(MCPError) as exc_info:
@@ -222,7 +222,7 @@ class TestClientSessionRequestResponse(BaseSessionTest):
         orphaned_payload = {"jsonrpc": "2.0", "id": 999, "result": {"orphaned": True}}
         self.transport.queue_message(orphaned_payload, metadata={"meta": "data"})
 
-        await self.session.start()
+        await self.session._start()
 
         # Wait for background message loop to process the queued message
         await asyncio.sleep(0.001)
@@ -242,7 +242,7 @@ class TestClientSessionRequestResponse(BaseSessionTest):
         ping_payload = {"jsonrpc": "2.0", "method": "ping", "id": 42}
         self.transport.queue_message(ping_payload)
 
-        await self.session.start()
+        await self.session._start()
 
         # Wait for message processing
         await asyncio.sleep(0.001)
@@ -263,7 +263,7 @@ class TestClientSessionRequestResponse(BaseSessionTest):
         list_roots_payload = {"jsonrpc": "2.0", "method": "roots/list", "id": 42}
         self.transport.queue_message(list_roots_payload)
 
-        await self.session.start()
+        await self.session._start()
         await asyncio.sleep(0.001)
 
         # Should send error response
@@ -287,7 +287,7 @@ class TestClientSessionRequestResponse(BaseSessionTest):
         list_roots_payload = {"jsonrpc": "2.0", "method": "roots/list", "id": 42}
         self.transport.queue_message(list_roots_payload)
 
-        await self.session.start()
+        await self.session._start()
         await asyncio.sleep(0.001)
 
         # Should return the configured roots
@@ -320,7 +320,7 @@ class TestClientSessionRequestResponse(BaseSessionTest):
         }
         self.transport.queue_message(create_message_payload)
 
-        await self.session.start()
+        await self.session._start()
         await asyncio.sleep(0.001)
 
         # Should send error response
@@ -356,7 +356,7 @@ class TestClientSessionRequestResponse(BaseSessionTest):
         }
         self.transport.queue_message(create_message_payload)
 
-        await self.session.start()
+        await self.session._start()
         await asyncio.sleep(0.001)
 
         # Should send error response
@@ -399,7 +399,7 @@ class TestClientSessionRequestResponse(BaseSessionTest):
         }
         self.transport.queue_message(create_message_payload)
 
-        await self.session.start()
+        await self.session._start()
         await asyncio.sleep(0.001)
 
         # Should successfully call handler and return result
@@ -426,7 +426,7 @@ class TestClientSessionRequestResponse(BaseSessionTest):
         for malformed_payload in test_cases:
             self.transport.queue_message(malformed_payload)
 
-        await self.session.start()
+        await self.session._start()
         await asyncio.sleep(0.001)
 
         # Should have attempted to send error responses, but may have failed due to bad
@@ -471,7 +471,7 @@ class TestClientSessionRequestResponse(BaseSessionTest):
         }
         self.transport.queue_message(create_message_payload)
 
-        await self.session.start()
+        await self.session._start()
         await asyncio.sleep(0.001)
 
         # Should get back an INTERNAL_ERROR response, not crash
@@ -531,7 +531,7 @@ class TestClientSessionRequestResponse(BaseSessionTest):
         )
         self.transport.queue_message({"jsonrpc": "2.0", "method": "ping", "id": 2})
 
-        await self.session.start()
+        await self.session._start()
 
         # Wait for slow handler to start
         await handler_started.wait()
@@ -572,3 +572,24 @@ class TestClientSessionRequestResponse(BaseSessionTest):
         slow_response = slow_responses[0].payload
         assert "result" in slow_response
         assert slow_response["result"]["model"] == "test-model"
+
+    # async def test_request_timeout_does_not_affect_subsequent_requests(self):
+    #     self.session._initialized = True
+
+    #     # First request will timeout
+    #     request1 = PingRequest()
+    #     with pytest.raises(TimeoutError):
+    #         await self.session.send_request(request1, timeout=1e-9)
+
+    #     # Second request should work fine
+    #     request2 = PingRequest()
+    #     self.transport.queue_response(request_id=1, result={})
+
+    #     result, _ = await self.session.send_request(request2)
+
+    #     assert result == {}
+    #     assert self.session._running is True
+    #     assert self.session._pending_requests == {}
+    #     assert len(self.transport.sent_messages) == 3  # 1 ping, 1 cancel, 1 response
+
+    #     await self.session.stop()

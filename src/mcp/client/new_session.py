@@ -93,15 +93,33 @@ class ClientSession:
         self._initialized = False
         self.notifications: asyncio.Queue[Notification] = asyncio.Queue()
 
-    async def start(self) -> None:
-        """Start the session message loop."""
+    async def _start(self) -> None:
+        """
+        Start the session's background message processing loop.
+
+        Creates a task to continuously process incoming messages, enabling
+        real-time handling of server requests and notifications.
+
+        Called automatically by initialize(). Idempotent - safe to call multiple times.
+        """
         if self._running:
             return
         self._running = True
         self._task = asyncio.create_task(self._message_loop())
 
     async def stop(self) -> None:
-        """Stop background processing and close transport."""
+        """
+        Stop the session and clean up all resources.
+
+        Terminates the background message loop, cancels any pending requests,
+        and closes the transport connection. After calling this, the session
+        cannot be restarted.
+
+        Safe to call multiple times - subsequent calls do nothing.
+        """
+        if not self._running and self._task is None:
+            return
+
         self._running = False
         if self._task:
             self._task.cancel()
@@ -110,6 +128,12 @@ class ClientSession:
             except asyncio.CancelledError:
                 pass
             self._task = None
+
+        # Reset session state
+        self._initialized = False
+        self._initialize_result = None
+        self._initializing = None
+
         await self.transport.close()
 
     async def initialize(
@@ -226,7 +250,7 @@ class ClientSession:
             This is an internal implementation method. Use initialize() instead,
             which provides idempotency and concurrent call handling.
         """
-        await self.start()
+        await self._start()
         init_request = InitializeRequest(
             client_info=self.client_info,  # type: ignore[call-arg]
             capabilities=self.capabilities,
@@ -291,7 +315,7 @@ class ClientSession:
             tuple[Any, dict[str, Any] | None]: The result and transport metadata.
                 (result, transport_metadata).
         """
-        await self.start()
+        await self._start()
         await self._ensure_initialized()
 
         # Generate request ID and create JSON-RPC wrapper
@@ -321,7 +345,7 @@ class ClientSession:
         transport_metadata: dict[str, Any] | None = None,
     ) -> None:
         """Send a notification to the server."""
-        await self.start()
+        await self._start()
         jsonrpc_notification = JSONRPCNotification.from_notification(notification)
         await self.transport.send(jsonrpc_notification.to_wire(), transport_metadata)
 
